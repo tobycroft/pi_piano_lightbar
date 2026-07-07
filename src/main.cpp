@@ -100,8 +100,14 @@ int main() {
             last_bootsel_check = now;
             bool pressed = bootsel_button_is_pressed();
 
+            if (pressed) {
+                led_ctrl.set_led(0, 0, 0, 255);
+                led_ctrl.update();
+            }
+
             if (pressed && !bootsel_was_pressed) {
                 bootsel_press_start = now;
+                printf("BOOTSEL pressed\n");
             } else if (pressed && bootsel_was_pressed) {
                 if (now - bootsel_press_start >= 3000) {
                     printf("BOOTSEL held 3s, entering bootloader...\n");
