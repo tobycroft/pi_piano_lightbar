@@ -9,7 +9,10 @@
 #include "led/led_controller.h"
 #include "led/led_animator.h"
 #include "usb/usb_midi_device.h"
+#include "usb/usb_midi.h"
+#if CFG_TUH_ENABLED
 #include "usb/usb_midi_host.h"
+#endif
 #include "system/bootsel_button.h"
 
 static constexpr uint LED_PIN = 0;
@@ -42,11 +45,14 @@ int main() {
     led_ctrl.clear_all();
 
     usb::UsbMidiDevice midi_device;
+#if CFG_TUH_ENABLED
     usb::UsbMidiHost midi_host;
+#endif
 
     usb::UsbMidiIn* midi_in = nullptr;
     UsbRole role = detect_role();
 
+#if CFG_TUH_ENABLED
     if (role == UsbRole::Device) {
         printf("Role: Device (VBUS detected)\n");
         tud_init(TUD_OPT_RHPORT);
@@ -62,6 +68,12 @@ int main() {
             midi_in = &midi_device;
         }
     }
+#else
+    printf("Role: Device (VBUS detected)\n");
+    tud_init(TUD_OPT_RHPORT);
+    midi_in = &midi_device;
+    role = UsbRole::Device;
+#endif
 
     bool midi_active = false;
 
@@ -72,11 +84,15 @@ int main() {
     printf("LED test running, waiting for USB MIDI...\n");
 
     while (true) {
+#if CFG_TUH_ENABLED
         if (role == UsbRole::Device) {
             tud_task();
         } else {
             tuh_task();
         }
+#else
+        tud_task();
+#endif
 
         uint32_t now = to_ms_since_boot(get_absolute_time());
 

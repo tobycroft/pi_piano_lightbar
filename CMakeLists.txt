@@ -35,17 +35,22 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(pi_piano_lightbar
+set(SOURCES
     src/main.cpp
     src/led/ws2812.cpp
     src/led/led_controller.cpp
     src/led/led_animator.cpp
     src/midi/midi_parser.cpp
     src/usb/usb_midi_device.cpp
-    src/usb/usb_midi_host.cpp
     src/system/bootsel_button.c
     usb_descriptors.c
 )
+
+if(CFG_TUH_ENABLED)
+    list(APPEND SOURCES src/usb/usb_midi_host.cpp)
+endif()
+
+add_executable(pi_piano_lightbar ${SOURCES})
 
 pico_set_program_name(pi_piano_lightbar "pi_piano_lightbar")
 pico_set_program_version(pi_piano_lightbar "0.1")
@@ -60,8 +65,11 @@ target_link_libraries(pi_piano_lightbar
         hardware_pio
         hardware_clocks
         tinyusb_device
-        tinyusb_host
 )
+
+if(CFG_TUH_ENABLED)
+    target_link_libraries(pi_piano_lightbar tinyusb_host)
+endif()
 
 # Add the standard include files to the build
 target_include_directories(pi_piano_lightbar PRIVATE

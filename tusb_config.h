@@ -6,10 +6,10 @@ extern "C" {
 
 #define CFG_TUSB_MCU            OPT_MCU_RP2040
 
-#define CFG_TUSB_RHPORT0_MODE   (OPT_MODE_DEVICE | OPT_MODE_HOST)
+#define CFG_TUSB_RHPORT0_MODE   OPT_MODE_DEVICE
 
 #define CFG_TUD_ENABLED         1
-#define CFG_TUH_ENABLED         1
+#define CFG_TUH_ENABLED         0
 
 #define CFG_TUD_MIDI            1
 #define CFG_TUD_MIDI_RX_BUFSIZE 64
