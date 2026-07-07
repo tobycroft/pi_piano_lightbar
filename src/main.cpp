@@ -76,6 +76,9 @@ int main() {
 #endif
 
     bool midi_active = false;
+    bool active_leds[NUM_LEDS] = {false};
+    bool blink_on = false;
+    uint32_t last_blink_toggle = 0;
 
     uint32_t bootsel_press_start = 0;
     bool bootsel_was_pressed = false;
@@ -130,25 +133,46 @@ int main() {
             animator.tick();
         } else {
             auto events = midi_in ? midi_in->poll() : std::vector<midi::MidiEvent>{};
+            bool updated = false;
 
             for (auto& e : events) {
                 int idx = piano::note_to_index(e.note);
                 if (idx < 0) continue;
 
                 if (e.type == midi::EventType::NoteOn) {
+                    active_leds[idx] = true;
                     led_ctrl.set_led(static_cast<uint>(idx), 255, 255, 255);
+                    updated = true;
                 } else {
+                    active_leds[idx] = false;
                     led_ctrl.clear_led(static_cast<uint>(idx));
+                    updated = true;
                 }
             }
 
-            if (!events.empty()) {
+            if (now - last_blink_toggle >= 200) {
+                last_blink_toggle = now;
+                blink_on = !blink_on;
+                for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) {
+                    if (active_leds[i]) {
+                        if (blink_on) {
+                            led_ctrl.set_led(static_cast<uint>(i), 255, 255, 255);
+                        } else {
+                            led_ctrl.clear_led(static_cast<uint>(i));
+                        }
+                    }
+                }
+                updated = true;
+            }
+
+            if (updated) {
                 led_ctrl.update();
             }
 
             if (midi_in && !midi_in->is_connected()) {
                 printf("USB MIDI disconnected, returning to test mode...\n");
                 led_ctrl.clear_all();
+                for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) active_leds[i] = false;
                 midi_in->reset();
                 midi_active = false;
             }
