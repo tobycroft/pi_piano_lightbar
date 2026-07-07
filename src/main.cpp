@@ -49,6 +49,7 @@ int main() {
 
     if (role == UsbRole::Device) {
         printf("Role: Device (VBUS detected)\n");
+        tud_init(TUD_OPT_RHPORT);
         midi_in = &midi_device;
     } else {
         printf("Role: Host (no VBUS)\n");
@@ -56,6 +57,8 @@ int main() {
             midi_in = &midi_host;
         } else {
             printf("Host init failed, trying device mode...\n");
+            tud_init(TUD_OPT_RHPORT);
+            role = UsbRole::Device;
             midi_in = &midi_device;
         }
     }
