@@ -77,8 +77,7 @@ int main() {
 
     bool midi_active = false;
     bool active_leds[NUM_LEDS] = {false};
-    bool blink_on = false;
-    uint32_t last_blink_toggle = 0;
+    uint32_t led_on_time[NUM_LEDS] = {0};
 
     uint32_t bootsel_press_start = 0;
     bool bootsel_was_pressed = false;
@@ -141,6 +140,7 @@ int main() {
 
                 if (e.type == midi::EventType::NoteOn) {
                     active_leds[idx] = true;
+                    led_on_time[idx] = now;
                     led_ctrl.set_led(static_cast<uint>(idx), 255, 255, 255);
                     updated = true;
                 } else {
@@ -150,19 +150,12 @@ int main() {
                 }
             }
 
-            if (now - last_blink_toggle >= 200) {
-                last_blink_toggle = now;
-                blink_on = !blink_on;
-                for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) {
-                    if (active_leds[i]) {
-                        if (blink_on) {
-                            led_ctrl.set_led(static_cast<uint>(i), 255, 255, 255);
-                        } else {
-                            led_ctrl.clear_led(static_cast<uint>(i));
-                        }
-                    }
+            for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) {
+                if (active_leds[i] && (now - led_on_time[i] >= 50)) {
+                    active_leds[i] = false;
+                    led_ctrl.clear_led(static_cast<uint>(i));
+                    updated = true;
                 }
-                updated = true;
             }
 
             if (updated) {
