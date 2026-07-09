@@ -18,6 +18,7 @@
 static constexpr uint LED_PIN = 0;
 static constexpr uint NUM_LEDS = piano::NUM_LEDS;
 static constexpr uint VBUS_PIN = 24;
+static constexpr uint PICO_ONBOARD_LED = 25;
 
 enum class UsbRole {
     Device,
@@ -37,6 +38,11 @@ static UsbRole detect_role() {
 
 int main() {
     stdio_init_all();
+
+    // Onboard LED: confirm power and program is running
+    gpio_init(PICO_ONBOARD_LED);
+    gpio_set_dir(PICO_ONBOARD_LED, GPIO_OUT);
+    gpio_put(PICO_ONBOARD_LED, 1);
 
     gpio_init(VBUS_PIN);
     gpio_set_dir(VBUS_PIN, GPIO_IN);
