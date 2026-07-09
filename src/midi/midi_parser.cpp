@@ -60,6 +60,7 @@ bool MidiParser::try_parse_message() {
     MidiEvent event;
     event.note = note;
     event.velocity = velocity;
+    event.channel = status & 0x0F;
 
     if (msg_type == NOTE_ON && velocity > 0) {
         event.type = EventType::NoteOn;

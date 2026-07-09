@@ -13,6 +13,7 @@ struct MidiEvent {
     EventType type;
     uint8_t note;
     uint8_t velocity;
+    uint8_t channel;
 };
 
 } // namespace midi
