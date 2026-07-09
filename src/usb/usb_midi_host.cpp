@@ -5,12 +5,17 @@
 // using the usbh_app_driver_get_cb() extension mechanism.
 //
 // The driver:
-//   1. Matches interfaces with bInterfaceClass==AUDIO(1) and
-//      bInterfaceSubClass==MIDI_STREAMING(3)
-//   2. Opens the IN endpoint (bulk or interrupt) found in the descriptor
-//   3. Submits a receive transfer during set_config
-//   4. On each xfer completion, parses USB MIDI 4-byte packets and
-//      re-submits the receive transfer
+//   1. Matches Audio Control interface (subclass=0x01 protocol=0x00).
+//      TinyUSB's usbh.c has "#if CFG_TUH_MIDI" logic that forces
+//      assoc_itf_count=2 for MIDI devices, so the open() callback
+//      receives the **Audio Control** interface descriptor with a
+//      max_len that spans both Audio Control + MIDI Streaming.
+//   2. Walks through both interfaces within max_len to find the
+//      MIDI Streaming interface (subclass=0x03) and its endpoints.
+//   3. Opens the IN endpoint (bulk or interrupt) found in the descriptor.
+//   4. Submits a receive transfer during set_config.
+//   5. On each xfer completion, parses USB MIDI 4-byte packets and
+//      re-submits the receive transfer.
 // =============================================================================
 
 #include "usb/usb_midi_host.h"
@@ -88,33 +93,77 @@ static bool midih_init(void) {
 static bool midih_open(uint8_t rhport, uint8_t daddr,
                        tusb_desc_interface_t const* desc_itf, uint16_t max_len) {
     (void) rhport;
-    (void) max_len;
 
-    // Match: Audio class + MIDI Streaming subclass
-    if (desc_itf->bInterfaceClass != TUSB_CLASS_AUDIO) return false;
-    if (desc_itf->bInterfaceSubClass != AUDIO_SUBCLASS_MIDI_STREAMING) return false;
+    // TinyUSB usbh.c passes the **Audio Control** interface as the first
+    // descriptor when CFG_TUH_MIDI is defined (assoc_itf_count=2).
+    // Match: Audio class + Audio Control subclass + protocol=0x00
+    if (desc_itf->bInterfaceClass    != TUSB_CLASS_AUDIO)               return false;
+    if (desc_itf->bInterfaceSubClass != AUDIO_SUBCLASS_CONTROL)         return false;
+    if (desc_itf->bInterfaceProtocol != AUDIO_FUNC_PROTOCOL_CODE_UNDEF) return false;
 
-    printf("MIDIH: opening interface %d on device %d\n",
+    printf("MIDIH: found Audio Control itf=%d on device %d\n",
            desc_itf->bInterfaceNumber, daddr);
+
+    // max_len spans both Audio Control + MIDI Streaming interfaces.
+    // Walk through all descriptors to find the MIDI Streaming interface
+    // and its endpoints.
+    uint8_t const* p_desc_end = ((uint8_t const*) desc_itf) + max_len;
+    uint8_t const* p_desc = tu_desc_next(desc_itf); // skip Audio Control itf
+
+    // Skip Audio Control's class-specific descriptors (CS_INTERFACE)
+    while (p_desc < p_desc_end &&
+           tu_desc_type(p_desc) == TUSB_DESC_CS_INTERFACE) {
+        p_desc = tu_desc_next(p_desc);
+    }
+
+    // Skip Audio Control's optional interrupt endpoint (if present)
+    if (p_desc < p_desc_end &&
+        tu_desc_type(p_desc) == TUSB_DESC_ENDPOINT) {
+        p_desc = tu_desc_next(p_desc);
+    }
+
+    // Now we should be at the MIDI Streaming interface descriptor
+    if (p_desc >= p_desc_end ||
+        tu_desc_type(p_desc) != TUSB_DESC_INTERFACE) {
+        printf("MIDIH: MIDI Streaming interface not found!\n");
+        return false;
+    }
+
+    tusb_desc_interface_t const* midi_itf =
+        (tusb_desc_interface_t const*) p_desc;
+
+    if (midi_itf->bInterfaceClass    != TUSB_CLASS_AUDIO ||
+        midi_itf->bInterfaceSubClass != AUDIO_SUBCLASS_MIDI_STREAMING) {
+        printf("MIDIH: unexpected interface (class=%d subclass=%d)\n",
+               midi_itf->bInterfaceClass, midi_itf->bInterfaceSubClass);
+        return false;
+    }
+
+    printf("MIDIH: found MIDI Streaming itf=%d on device %d (%d endpoints)\n",
+           midi_itf->bInterfaceNumber, daddr, midi_itf->bNumEndpoints);
 
     MidiHInterface* p_itf = find_new_itf();
     if (!p_itf) return false;
 
+    // Store the Audio Control interface number (set_config will be called
+    // for both interfaces; we use the Audio Control itf_num as the key)
     p_itf->daddr = daddr;
     p_itf->itf_num = desc_itf->bInterfaceNumber;
 
-    // Walk endpoint descriptors
-    uint8_t const* p_desc = (uint8_t const*) desc_itf;
-    p_desc = tu_desc_next(p_desc); // skip interface descriptor
+    // Walk MIDI Streaming's descriptors to find endpoints
+    p_desc = tu_desc_next(p_desc); // skip MIDI Streaming itf descriptor
 
-    for (int i = 0; i < desc_itf->bNumEndpoints; i++) {
+    // Skip class-specific descriptors (CS_INTERFACE: MS_Header, Jacks, etc.)
+    while (p_desc < p_desc_end &&
+           tu_desc_type(p_desc) == TUSB_DESC_CS_INTERFACE) {
+        p_desc = tu_desc_next(p_desc);
+    }
+
+    // Process endpoint descriptors (Bulk/Interrupt IN/OUT)
+    while (p_desc < p_desc_end &&
+           tu_desc_type(p_desc) == TUSB_DESC_ENDPOINT) {
         tusb_desc_endpoint_t const* desc_ep =
             (tusb_desc_endpoint_t const*) p_desc;
-
-        if (desc_ep->bDescriptorType != TUSB_DESC_ENDPOINT) {
-            p_desc = tu_desc_next(p_desc);
-            continue;
-        }
 
         if (tu_edpt_dir(desc_ep->bEndpointAddress) == TUSB_DIR_IN) {
             p_itf->ep_in = desc_ep->bEndpointAddress;
@@ -127,22 +176,33 @@ static bool midih_open(uint8_t rhport, uint8_t daddr,
         tuh_edpt_open(daddr, desc_ep);
 
         p_desc = tu_desc_next(p_desc);
+
+        // Skip CS_ENDPOINT descriptor (MS_General) if present
+        if (p_desc < p_desc_end &&
+            tu_desc_type(p_desc) == TUSB_DESC_CS_ENDPOINT) {
+            p_desc = tu_desc_next(p_desc);
+        }
     }
 
-    return true;
+    printf("MIDIH: ep_in=0x%02x ep_out=0x%02x\n",
+           p_itf->ep_in, p_itf->ep_out);
+
+    return (p_itf->ep_in != 0 || p_itf->ep_out != 0);
 }
 
 static bool midih_set_config(uint8_t daddr, uint8_t itf_num) {
-    MidiHInterface* p_itf = nullptr;
-    for (int i = 0; i < CFG_TUH_MIDI; i++) {
-        if (_midi_itf[i].daddr == daddr && _midi_itf[i].itf_num == itf_num) {
-            p_itf = &_midi_itf[i];
-            break;
-        }
-    }
+    // set_config is called for both Audio Control and MIDI Streaming
+    // interfaces. Match by daddr; accept itf_num == stored or stored+1.
+    MidiHInterface* p_itf = find_itf_by_daddr(daddr);
     if (!p_itf) return false;
 
-    // Device is fully enumerated
+    if (itf_num != p_itf->itf_num && itf_num != p_itf->itf_num + 1) {
+        return false;
+    }
+
+    // Only process mount once (first call is for Audio Control itf)
+    if (p_itf->mounted) return true;
+
     p_itf->mounted = true;
 
     printf("MIDIH: device %d mounted (ep_in=0x%02x)\n", daddr, p_itf->ep_in);
