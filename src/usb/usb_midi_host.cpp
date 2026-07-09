@@ -105,7 +105,12 @@ void UsbMidiHost::start_receive() {
 
 void UsbMidiHost::process_packet(const uint8_t* packet, uint32_t len) {
     for (uint32_t i = 0; i + 4 <= len; i += 4) {
-        uint8_t cin = packet[i] & 0x0F;
+        // USB MIDI Event Packet:
+        // Byte 0: [CIN (4 bits) | CableNumber (4 bits)]
+        // Byte 1: MIDI status byte (or data)
+        // Byte 2: MIDI data 1
+        // Byte 3: MIDI data 2
+        uint8_t cin = (packet[i] >> 4) & 0x0F;
         uint8_t raw[3] = {packet[i + 1], packet[i + 2], packet[i + 3]};
 
         switch (cin) {
