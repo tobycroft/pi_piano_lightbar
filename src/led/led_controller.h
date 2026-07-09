@@ -48,6 +48,11 @@ public:
     // 设置全部 88 键为同一颜色
     void setAllKeys(LedColor color);
 
+    // 设置全局亮度 (0~255)，影响后续所有 setKey/setAllKeys 调用
+    // 默认 255 = 全亮
+    void setBrightness(uint8_t brightness);
+    uint8_t brightness() const;
+
     // 将缓冲区数据推送到 LED 硬件
     void update();
 
@@ -65,6 +70,7 @@ private:
     static RGB colorToRgb(LedColor color);
 
     Ws2812& ws_;
+    uint8_t brightness_ = 255;
 };
 
 } // namespace led

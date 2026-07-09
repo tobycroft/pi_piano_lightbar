@@ -9,11 +9,21 @@ LedController::LedController(Ws2812& ws2812)
 
 void LedController::setKey(uint index, LedColor color) {
     auto rgb = colorToRgb(color);
+    if (brightness_ < 255) {
+        rgb.r = static_cast<uint8_t>((static_cast<uint16_t>(rgb.r) * brightness_) / 255);
+        rgb.g = static_cast<uint8_t>((static_cast<uint16_t>(rgb.g) * brightness_) / 255);
+        rgb.b = static_cast<uint8_t>((static_cast<uint16_t>(rgb.b) * brightness_) / 255);
+    }
     ws_.set(index, rgb.r, rgb.g, rgb.b);
 }
 
 void LedController::setAllKeys(LedColor color) {
     auto rgb = colorToRgb(color);
+    if (brightness_ < 255) {
+        rgb.r = static_cast<uint8_t>((static_cast<uint16_t>(rgb.r) * brightness_) / 255);
+        rgb.g = static_cast<uint8_t>((static_cast<uint16_t>(rgb.g) * brightness_) / 255);
+        rgb.b = static_cast<uint8_t>((static_cast<uint16_t>(rgb.b) * brightness_) / 255);
+    }
     for (uint i = 0; i < ws_.num_leds(); i++) {
         ws_.set(i, rgb.r, rgb.g, rgb.b);
     }
@@ -29,6 +39,14 @@ void LedController::clear() {
 
 uint LedController::numLeds() const {
     return ws_.num_leds();
+}
+
+void LedController::setBrightness(uint8_t brightness) {
+    brightness_ = brightness;
+}
+
+uint8_t LedController::brightness() const {
+    return brightness_;
 }
 
 // =============================================================================
