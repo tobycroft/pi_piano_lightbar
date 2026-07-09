@@ -24,9 +24,9 @@ Ws2812::Ws2812(PIO pio, uint sm, uint pin, uint num_leds)
     sm_config_set_out_shift(&c, false, true, 24);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
-    // 9 SM cycles per bit, 24 bits per LED, 800 kHz
-    // sys_clk / (9 * 24 * 800000) ≈ sys_clk / 17280000
-    float div = static_cast<float>(freq_) / 17280000.0f;
+    // 9 SM cycles per bit, 800 kHz bit rate
+    // div = sys_clk / (9 * 800000)
+    float div = static_cast<float>(freq_) / 7200000.0f;
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(pio_, sm_, offset, &c);
