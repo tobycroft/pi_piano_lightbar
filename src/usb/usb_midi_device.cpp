@@ -4,9 +4,7 @@
 namespace usb {
 
 UsbMidiDevice::UsbMidiDevice()
-    : connected_(false) {
-    tusb_init();
-}
+    : connected_(false) {}
 
 bool UsbMidiDevice::is_connected() {
     if (tud_midi_mounted()) {

@@ -197,6 +197,4 @@ int main() {
 
         sleep_ms(1);
     }
-
-    return 0;
 }

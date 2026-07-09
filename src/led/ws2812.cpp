@@ -56,8 +56,8 @@ Ws2812::~Ws2812() {
 void Ws2812::set(uint index, uint8_t r, uint8_t g, uint8_t b) {
     if (index >= num_leds_) return;
     size_t offset = index * 3;
-    buf_[offset] = g;
-    buf_[offset + 1] = r;
+    buf_[offset] = r;
+    buf_[offset + 1] = g;
     buf_[offset + 2] = b;
 }
 
@@ -69,7 +69,7 @@ void Ws2812::clear() {
 void Ws2812::write() {
     for (uint i = 0; i < num_leds_; ++i) {
         size_t offset = i * 3;
-        uint32_t grb = rgb_to_grb(buf_[offset + 1], buf_[offset], buf_[offset + 2]);
+        uint32_t grb = rgb_to_grb(buf_[offset], buf_[offset + 1], buf_[offset + 2]);
         pio_sm_put_blocking(pio_, sm_, grb);
     }
     sleep_us(60);
