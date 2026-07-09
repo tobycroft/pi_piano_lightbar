@@ -84,14 +84,14 @@ uint32_t Ws2812::rgb_to_wire(uint8_t r, uint8_t g, uint8_t b,
                               ColorOrder order) {
     switch (order) {
         case ColorOrder::GRB:
-            return (static_cast<uint32_t>(g) << 16) |
-                   (static_cast<uint32_t>(r) << 8)  |
-                   static_cast<uint32_t>(b);
+            return (static_cast<uint32_t>(g) << 24) |
+                   (static_cast<uint32_t>(r) << 16) |
+                   (static_cast<uint32_t>(b) << 8);
         case ColorOrder::RGB:
         default:
-            return (static_cast<uint32_t>(r) << 16) |
-                   (static_cast<uint32_t>(g) << 8)  |
-                   static_cast<uint32_t>(b);
+            return (static_cast<uint32_t>(r) << 24) |
+                   (static_cast<uint32_t>(g) << 16) |
+                   (static_cast<uint32_t>(b) << 8);
     }
 }
 
