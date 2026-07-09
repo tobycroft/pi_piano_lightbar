@@ -41,8 +41,6 @@ private:
 
     static constexpr size_t RX_BUFFER_SIZE = 64;
     uint8_t rx_buffer_[RX_BUFFER_SIZE] = {};
-    volatile bool xfer_done_ = false;
-    volatile uint32_t xfer_len_ = 0;
 
     void start_receive();
     void process_packet(const uint8_t* packet, uint32_t len);

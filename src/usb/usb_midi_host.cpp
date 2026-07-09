@@ -15,9 +15,11 @@ UsbMidiHost* s_instance = nullptr;
 void xfer_callback_internal(tuh_xfer_t* xfer) {
     if (!s_instance) return;
 
-    if (xfer->result == XFER_RESULT_SUCCESS) {
-        s_instance->xfer_len_ = xfer->actual_len;
-        s_instance->xfer_done_ = true;
+    if (xfer->result == XFER_RESULT_SUCCESS && xfer->actual_len > 0) {
+        // Process received data immediately, then start the next receive.
+        // This avoids a race where start_receive() clears the xfer_done_ flag
+        // before poll() can read it.
+        s_instance->process_packet(xfer->buffer, xfer->actual_len);
     }
 
     s_instance->start_receive();
@@ -68,11 +70,9 @@ std::vector<midi::MidiEvent> UsbMidiHost::poll() {
 
     if (!connected_) return events;
 
-    if (xfer_done_) {
-        process_packet(rx_buffer_, xfer_len_);
-        xfer_done_ = false;
-    }
-
+    // Data is processed directly in the xfer callback (xfer_callback_internal),
+    // so there's no stale xfer_done_ flag to check here.
+    // Just drain any parsed events from the MIDI parser.
     auto parsed = parser_.poll();
     events.insert(events.end(), parsed.begin(), parsed.end());
     return events;
@@ -84,15 +84,10 @@ void UsbMidiHost::reset() {
     dev_addr_ = 0;
     ep_in_ = 0;
     ep_in_size_ = 0;
-    xfer_done_ = false;
-    xfer_len_ = 0;
 }
 
 void UsbMidiHost::start_receive() {
     if (!connected_ || ep_in_ == 0) return;
-
-    xfer_done_ = false;
-    xfer_len_ = 0;
 
     tuh_xfer_t xfer = {
         .daddr = dev_addr_,
