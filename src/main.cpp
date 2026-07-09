@@ -15,9 +15,9 @@ int main() {
     gpio_set_dir(PICO_ONBOARD_LED, GPIO_OUT);
     gpio_put(PICO_ONBOARD_LED, 1);
 
-    printf("=== SK6812 GRB 3-Byte ===\n");
+    printf("=== SK6812 RGBW GRBW 4-Byte ===\n");
 
-    led::Ws2812 ws2812(pio0, 0, LED_PIN, NUM_LEDS, led::ColorOrder::GRB);
+    led::Ws2812 ws2812(pio0, 0, LED_PIN, NUM_LEDS, led::ColorOrder::GRBW);
 
     while (true) {
         printf("RED\n");
@@ -32,6 +32,11 @@ int main() {
 
         printf("BLUE\n");
         for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 255);
+        ws2812.write();
+        sleep_ms(1000);
+
+        printf("WHITE (W ch)\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 255);
         ws2812.write();
         sleep_ms(1000);
 
@@ -51,7 +56,7 @@ int main() {
         sleep_ms(1000);
 
         printf("OFF\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0);
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 0);
         ws2812.write();
         sleep_ms(1000);
     }
