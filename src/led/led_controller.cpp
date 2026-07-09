@@ -17,6 +17,16 @@ void LedController::setKey(uint index, LedColor color) {
     ws_.set(index, rgb.r, rgb.g, rgb.b);
 }
 
+void LedController::setKey(uint index, LedColor color, uint8_t brightness) {
+    auto rgb = colorToRgb(color);
+    if (brightness < 255) {
+        rgb.r = static_cast<uint8_t>((static_cast<uint16_t>(rgb.r) * brightness) / 255);
+        rgb.g = static_cast<uint8_t>((static_cast<uint16_t>(rgb.g) * brightness) / 255);
+        rgb.b = static_cast<uint8_t>((static_cast<uint16_t>(rgb.b) * brightness) / 255);
+    }
+    ws_.set(index, rgb.r, rgb.g, rgb.b);
+}
+
 void LedController::setAllKeys(LedColor color) {
     auto rgb = colorToRgb(color);
     if (brightness_ < 255) {

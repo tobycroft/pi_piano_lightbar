@@ -43,12 +43,17 @@ public:
 
     // 设置指定按键的颜色（不立即输出，需调用 update()）
     // index: 0~87, 对应 A0~C8
+    // 使用全局亮度（默认 255）
     void setKey(uint index, LedColor color);
 
-    // 设置全部 88 键为同一颜色
+    // 设置指定按键的颜色，并单独指定该键的亮度 (0~255)
+    // 用于 MIDI velocity → 亮度映射，每个按键可有独立亮度
+    void setKey(uint index, LedColor color, uint8_t brightness);
+
+    // 设置全部 88 键为同一颜色（使用全局亮度）
     void setAllKeys(LedColor color);
 
-    // 设置全局亮度 (0~255)，影响后续所有 setKey/setAllKeys 调用
+    // 设置全局亮度 (0~255)，影响后续所有 setKey(LedColor)/setAllKeys 调用
     // 默认 255 = 全亮
     void setBrightness(uint8_t brightness);
     uint8_t brightness() const;

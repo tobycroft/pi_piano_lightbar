@@ -55,6 +55,7 @@ int main() {
 
     // 清空灯条，启动跑马灯
     led_ctrl.setAllKeys(led::LedColor::OFF);
+    led_ctrl.setBrightness(255);
     led_ctrl.update();
 
     // 初始化 USB MIDI Host
@@ -103,13 +104,14 @@ int main() {
         }
 
         if (!midi_connected && was_connected) {
-            // MIDI 设备断开 → 恢复板载 LED 常亮
+            // MIDI 设备断开 → 恢复板载 LED 常亮, 恢复最高亮度
             printf("MIDI device disconnected, returning to chase mode...\n");
             gpio_put(PICO_ONBOARD_LED, 1);
             onboard_led_on = true;
             midi_host.reset();
 
-            // 清空灯条，启动跑马灯
+            // 恢复最高亮度，清空灯条，启动跑马灯
+            led_ctrl.setBrightness(255);
             animator.reset();
         }
 
@@ -133,8 +135,11 @@ int main() {
 
                     if (e.type == midi::EventType::NoteOn) {
                         active_notes[idx] = true;
+                        // 将 MIDI velocity (0~127) 映射为亮度 (0~255)
+                        uint8_t brightness = static_cast<uint8_t>(
+                            (static_cast<uint16_t>(e.velocity) * 255) / 127);
                         led_ctrl.setKey(static_cast<uint>(idx),
-                                        led::LedColor::WHITE);
+                                        led::LedColor::WHITE, brightness);
                         updated = true;
                     } else {
                         active_notes[idx] = false;
