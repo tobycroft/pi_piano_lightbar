@@ -3,6 +3,7 @@
 // =============================================================================
 // BOOTSEL 按键连接在 QSPI flash 的 CS 引脚上。
 // 正常运行期间读取该按键需要临时接管 QSPI 引脚控制权。
+// 实现位于 bootsel_button.c，强制运行在 RAM 中以确保安全。
 //
 // 用法:
 //   if (bootsel_button_is_pressed()) { ... }
@@ -12,34 +13,16 @@
 
 #pragma once
 
-#include "hardware/structs/ioqspi.h"
-#include "hardware/structs/sio.h"
-#include "hardware/sync.h"
+#include <stdbool.h>
 
-inline bool bootsel_button_is_pressed() {
-    constexpr uint32_t CS_PIN_INDEX = 1;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-    uint32_t flags = save_and_disable_interrupts();
+// 返回 true 表示 BOOTSEL 按键当前被按下
+// 注意: 此函数必须运行在 RAM 中（实现中已标记 __no_inline_not_in_flash_func）
+bool bootsel_button_is_pressed(void);
 
-    // 将 QSPI_SS 引脚设为 Hi-Z (禁用输出使能)，以便读取按键状态
-    hw_write_masked(&ioqspi_hw->io[CS_PIN_INDEX].ctrl,
-                    GPIO_OVERRIDE_LOW << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,
-                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
-
-    // 等待引脚电平稳定
-    for (volatile int i = 0; i < 1000; ++i) {
-        __asm__ volatile("nop");
-    }
-
-    // 读取 QSPI_SS 引脚状态 (低电平 = 按下)
-    bool pressed = !(sio_hw->gpio_hi_in & (1u << CS_PIN_INDEX));
-
-    // 恢复 QSPI 正常控制
-    hw_write_masked(&ioqspi_hw->io[CS_PIN_INDEX].ctrl,
-                    GPIO_OVERRIDE_NORMAL << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,
-                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
-
-    restore_interrupts(flags);
-
-    return pressed;
+#ifdef __cplusplus
 }
+#endif

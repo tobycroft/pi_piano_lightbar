@@ -41,6 +41,7 @@ set(SOURCES
     src/led/led_controller.cpp
     src/led/led_animator.cpp
     src/midi/midi_parser.cpp
+    src/system/bootsel_button.c
     src/usb/usb_midi_host.cpp
     src/led/ws2812.pio
 )
