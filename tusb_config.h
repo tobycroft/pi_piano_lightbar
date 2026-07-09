@@ -29,7 +29,10 @@ extern "C" {
 #define CFG_TUH_HID             0
 #define CFG_TUH_VENDOR          0
 
-#define CFG_TUSB_DEBUG          2
+#define CFG_TUSB_DEBUG          0
+
+// Host port number for RP2040 (0 = roothub port 0)
+#define BOARD_TUH_RHPORT        0
 
 // TinyUSB host stack uses audio class constants for MIDI device detection,
 // even in host-only mode. Include the audio header to define them.

@@ -4,15 +4,16 @@
 // RP2040 USB MIDI Host → 88-key WS2812 LED strip controller
 //
 // 硬件: Raspberry Pi Pico, WS2812 GRB 3-byte 灯条, 88键
-// 引脚: LED data = GPIO28
+// 引脚: LED data = GPIO28, 板载 LED = GPIO25
 //
 // 架构:
-//   main.cpp          — 初始化硬件, 启动主循环
-//   led/ws2812.cpp    — WS2812 PIO 底层驱动
-//   led/led_controller — LED 颜色控制器 (颜色预设 + 按键映射)
-//   (后续) usb/        — TinyUSB Host MIDI 接收
-//   (后续) midi/       — MIDI 协议解析
-//   (后续) piano/      — 音符→LED 映射
+//   main.cpp               — 初始化硬件, 启动主循环
+//   led/ws2812.cpp          — WS2812 PIO 底层驱动
+//   led/led_controller.cpp  — LED 颜色控制器
+//   led/led_animator.cpp    — 跑马灯动画
+//   usb/usb_midi_host.cpp   — TinyUSB Host MIDI 接收
+//   midi/midi_parser.cpp    — MIDI 协议解析
+//   piano/piano_config.h    — 音符→LED 映射
 //
 // MIDI 映射: A0=note21=LED[0], C8=note108=LED[87]
 // =============================================================================
@@ -21,76 +22,145 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "tusb.h"
+
+#include "piano/piano_config.h"
 #include "led/ws2812.h"
 #include "led/led_controller.h"
+#include "led/led_animator.h"
+#include "usb/usb_midi_host.h"
 
 // 硬件引脚定义
 static constexpr uint LED_PIN = 28;           // WS2812 数据引脚
-static constexpr uint NUM_LEDS = 88;          // 88 键钢琴
 static constexpr uint PICO_ONBOARD_LED = 25;  // Pico 板载 LED
+
+// 板载 LED 闪烁时长 (ms)
+static constexpr uint32_t ONBOARD_LED_BLINK_MS = 80;
 
 int main() {
     stdio_init_all();
 
-    // 板载 LED 常亮，指示系统运行
+    // 初始化板载 LED — 上电常亮
     gpio_init(PICO_ONBOARD_LED);
     gpio_set_dir(PICO_ONBOARD_LED, GPIO_OUT);
     gpio_put(PICO_ONBOARD_LED, 1);
 
-    printf("=== LedController Color Test ===\n");
+    printf("=== Piano LED MIDI Controller ===\n");
+    printf("LED strip: GPIO%d, %d LEDs\n", LED_PIN, piano::NUM_LEDS);
 
-    // 初始化 WS2812 灯条: PIO0, SM0, GPIO28, 88颗, GRB 颜色顺序
-    led::Ws2812 ws2812(pio0, 0, LED_PIN, NUM_LEDS, led::ColorOrder::GRB);
+    // 初始化 WS2812 灯条
+    led::Ws2812 ws2812(pio0, 0, LED_PIN, piano::NUM_LEDS, led::ColorOrder::GRB);
+    led::LedController led_ctrl(ws2812);
+    led::LedAnimator animator(led_ctrl);
 
-    // 创建 LED 颜色控制器 (上层统一调用接口)
-    led::LedController leds(ws2812);
+    // 清空灯条，启动跑马灯
+    led_ctrl.setAllKeys(led::LedColor::OFF);
+    led_ctrl.update();
 
-    // 依次循环显示所有颜色预设，每 1.5 秒切换
+    // 初始化 USB MIDI Host
+    usb::UsbMidiHost midi_host;
+    if (!midi_host.init()) {
+        printf("FATAL: USB MIDI Host init failed!\n");
+        // 初始化失败，仍然跑跑马灯
+        while (true) {
+            animator.tick();
+            sleep_ms(1);
+        }
+    }
+
+    printf("Chase animation running, waiting for USB MIDI device...\n");
+
+    // 状态跟踪
+    bool midi_connected = false;
+    bool was_connected = false;
+
+    // 板载 LED 闪烁状态
+    bool onboard_led_on = true;  // 初始状态: 亮
+    uint32_t onboard_led_off_at = 0;
+
+    // MIDI 按键状态
+    bool active_notes[piano::NUM_LEDS] = {false};
+
     while (true) {
-        printf("RED\n");
-        leds.setAllKeys(led::LedColor::RED);
-        leds.update();
-        sleep_ms(1500);
+        // 处理 USB Host 事件
+        tuh_task();
 
-        printf("GREEN\n");
-        leds.setAllKeys(led::LedColor::GREEN);
-        leds.update();
-        sleep_ms(1500);
+        uint32_t now = to_ms_since_boot(get_absolute_time());
 
-        printf("BLUE\n");
-        leds.setAllKeys(led::LedColor::BLUE);
-        leds.update();
-        sleep_ms(1500);
+        midi_connected = midi_host.is_connected();
 
-        printf("WHITE\n");
-        leds.setAllKeys(led::LedColor::WHITE);
-        leds.update();
-        sleep_ms(1500);
+        // --- 连接状态变化处理 ---
+        if (midi_connected && !was_connected) {
+            // MIDI 设备刚接入 → 熄灭板载 LED
+            printf("MIDI device connected! Switching to MIDI mode...\n");
+            gpio_put(PICO_ONBOARD_LED, 0);
+            onboard_led_on = false;
 
-        printf("LAKE_BLUE\n");
-        leds.setAllKeys(led::LedColor::LAKE_BLUE);
-        leds.update();
-        sleep_ms(1500);
+            // 清空灯条，停止跑马灯
+            led_ctrl.setAllKeys(led::LedColor::OFF);
+            led_ctrl.update();
+            for (auto& n : active_notes) n = false;
+        }
 
-        printf("GRASS_GREEN\n");
-        leds.setAllKeys(led::LedColor::GRASS_GREEN);
-        leds.update();
-        sleep_ms(1500);
+        if (!midi_connected && was_connected) {
+            // MIDI 设备断开 → 恢复板载 LED 常亮
+            printf("MIDI device disconnected, returning to chase mode...\n");
+            gpio_put(PICO_ONBOARD_LED, 1);
+            onboard_led_on = true;
+            midi_host.reset();
 
-        printf("PINK\n");
-        leds.setAllKeys(led::LedColor::PINK);
-        leds.update();
-        sleep_ms(1500);
+            // 清空灯条，启动跑马灯
+            animator.reset();
+        }
 
-        printf("PURPLE\n");
-        leds.setAllKeys(led::LedColor::PURPLE);
-        leds.update();
-        sleep_ms(1500);
+        was_connected = midi_connected;
 
-        printf("OFF\n");
-        leds.setAllKeys(led::LedColor::OFF);
-        leds.update();
-        sleep_ms(1500);
+        // --- 主逻辑 ---
+        if (midi_connected) {
+            // MIDI 模式: 处理 MIDI 事件
+            auto events = midi_host.poll();
+
+            if (!events.empty()) {
+                // 收到 MIDI 数据 → 板载 LED 闪烁 80ms
+                gpio_put(PICO_ONBOARD_LED, 1);
+                onboard_led_on = true;
+                onboard_led_off_at = now + ONBOARD_LED_BLINK_MS;
+
+                bool updated = false;
+                for (auto& e : events) {
+                    int idx = piano::note_to_index(e.note);
+                    if (idx < 0) continue;  // 超出 88 键范围，忽略
+
+                    if (e.type == midi::EventType::NoteOn) {
+                        active_notes[idx] = true;
+                        led_ctrl.setKey(static_cast<uint>(idx),
+                                        led::LedColor::WHITE);
+                        updated = true;
+                    } else {
+                        active_notes[idx] = false;
+                        led_ctrl.setKey(static_cast<uint>(idx),
+                                        led::LedColor::OFF);
+                        updated = true;
+                    }
+                }
+
+                if (updated) {
+                    led_ctrl.update();
+                }
+            }
+
+            // 板载 LED 闪烁时间到 → 熄灭
+            if (onboard_led_on && onboard_led_off_at > 0 && now >= onboard_led_off_at) {
+                gpio_put(PICO_ONBOARD_LED, 0);
+                onboard_led_on = false;
+                onboard_led_off_at = 0;
+            }
+        } else {
+            // 跑马灯模式: 运行 chase 动画
+            animator.tick();
+        }
+
+        sleep_ms(1);
     }
 
     return 0;

@@ -39,6 +39,9 @@ set(SOURCES
     src/main.cpp
     src/led/ws2812.cpp
     src/led/led_controller.cpp
+    src/led/led_animator.cpp
+    src/midi/midi_parser.cpp
+    src/usb/usb_midi_host.cpp
     src/led/ws2812.pio
 )
 
@@ -59,6 +62,7 @@ target_link_libraries(pi_piano_lightbar
         pico_stdlib
         hardware_pio
         hardware_clocks
+        tinyusb_host
 )
 
 # Add the standard include files to the build
