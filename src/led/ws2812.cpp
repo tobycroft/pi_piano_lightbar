@@ -1,3 +1,12 @@
+// =============================================================================
+// Ws2812 PIO 驱动实现
+// =============================================================================
+// 数据流: 32-bit word → PIO TX FIFO → autopull → OSR → bit-by-bit → GPIO
+// 3-byte 模式: autopull=24, 取 word 的高 24 位
+// 4-byte 模式: autopull=32, 取 word 的全部 32 位
+// 因此 rgb_to_wire 需要左移 8 位将数据对齐到高位
+// =============================================================================
+
 #include "led/ws2812.h"
 #include "ws2812.pio.h"
 
@@ -14,6 +23,7 @@ Ws2812::Ws2812(PIO pio, uint sm, uint pin, uint num_leds,
     , buf_(nullptr)
     , freq_(0)
 {
+    // 根据颜色顺序确定每 LED 字节数: RGB/GRB=3, RGBW/GRBW=4
     bytes_per_led_ = (order == ColorOrder::RGBW || order == ColorOrder::GRBW) ? 4 : 3;
     buf_ = new uint8_t[num_leds_ * bytes_per_led_]();
 
@@ -27,9 +37,11 @@ Ws2812::Ws2812(PIO pio, uint sm, uint pin, uint num_leds,
     pio_sm_config c = ws2812_program_get_default_config(offset);
     sm_config_set_sideset_pins(&c, pin_);
     sm_config_set_set_pins(&c, pin_, 1);
+    // autopull: 左移(MSB first), 自动拉取, 阈值 = bytes_per_led * 8
     sm_config_set_out_shift(&c, false, true, bytes_per_led_ * 8);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
+    // 800kHz bit rate, 9 SM cycles per bit
     float div = static_cast<float>(freq_) / (800000.0f * 9.0f);
     sm_config_set_clkdiv(&c, div);
 
@@ -66,6 +78,7 @@ void Ws2812::write() {
         }
         pio_sm_put_blocking(pio_, sm_, wire);
     }
+    // RESET code: >50µs low
     sleep_us(300);
 }
 
@@ -80,6 +93,10 @@ void Ws2812::clear() {
     sleep_us(300);
 }
 
+// 3-byte 模式 wire 打包: 左移 8 位对齐到 32-bit 高 24 位
+// 24-bit autopull 取 word[31:8]
+// GRB: word[31:24]=G, word[23:16]=R, word[15:8]=B, word[7:0]=don't care
+// RGB: word[31:24]=R, word[23:16]=G, word[15:8]=B, word[7:0]=don't care
 uint32_t Ws2812::rgb_to_wire(uint8_t r, uint8_t g, uint8_t b,
                               ColorOrder order) {
     switch (order) {
@@ -95,6 +112,9 @@ uint32_t Ws2812::rgb_to_wire(uint8_t r, uint8_t g, uint8_t b,
     }
 }
 
+// 4-byte 模式 wire 打包: 32-bit 全部使用
+// GRBW: word[31:24]=G, word[23:16]=R, word[15:8]=B, word[7:0]=W
+// RGBW: word[31:24]=R, word[23:16]=G, word[15:8]=B, word[7:0]=W
 uint32_t Ws2812::rgbw_to_wire(uint8_t r, uint8_t g, uint8_t b, uint8_t w,
                                ColorOrder order) {
     switch (order) {
