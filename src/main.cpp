@@ -20,15 +20,18 @@
 
 #include <cstdio>
 #include "pico/stdlib.h"
+#include "pico/bootrom.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "tusb.h"
 
 #include "piano/piano_config.h"
+#include "piano/color_scheme.h"
 #include "led/ws2812.h"
 #include "led/led_controller.h"
 #include "led/led_animator.h"
 #include "usb/usb_midi_host.h"
+#include "system/bootsel_button.h"
 
 // 硬件引脚定义
 static constexpr uint LED_PIN = 28;           // WS2812 数据引脚
@@ -36,6 +39,15 @@ static constexpr uint PICO_ONBOARD_LED = 25;  // Pico 板载 LED
 
 // 板载 LED 闪烁时长 (ms)
 static constexpr uint32_t ONBOARD_LED_BLINK_MS = 80;
+
+// 配色预览时长 (ms)
+static constexpr uint32_t PREVIEW_DURATION_MS = 1000;
+
+// BOOTSEL 长按进入 bootloader 的时长 (ms)
+static constexpr uint32_t BOOTSEL_LONG_PRESS_MS = 3000;
+
+// BOOTSEL 检测间隔 (ms)
+static constexpr uint32_t BOOTSEL_CHECK_INTERVAL_MS = 100;
 
 int main() {
     stdio_init_all();
@@ -82,6 +94,16 @@ int main() {
     // MIDI 按键状态
     bool active_notes[piano::NUM_LEDS] = {false};
 
+    // 配色方案状态
+    int current_scheme = 0;          // 当前配色方案索引
+    bool preview_active = false;     // 是否正在预览配色
+    uint32_t preview_start = 0;      // 预览开始时间
+
+    // BOOTSEL 按键状态
+    bool bootsel_was_pressed = false;
+    uint32_t bootsel_press_start = 0;
+    uint32_t last_bootsel_check = 0;
+
     while (true) {
         // 处理 USB Host 事件
         tuh_task();
@@ -90,6 +112,64 @@ int main() {
 
         midi_connected = midi_host.is_connected();
 
+        // --- BOOTSEL 按键检测 ---
+        if (now - last_bootsel_check >= BOOTSEL_CHECK_INTERVAL_MS) {
+            last_bootsel_check = now;
+            bool pressed = bootsel_button_is_pressed();
+
+            if (pressed && !bootsel_was_pressed) {
+                bootsel_press_start = now;
+                printf("BOOTSEL pressed\n");
+            }
+
+            if (!pressed && bootsel_was_pressed) {
+                // 短按: 切换配色方案
+                if (now - bootsel_press_start < BOOTSEL_LONG_PRESS_MS) {
+                    current_scheme = (current_scheme + 1) % piano::kNumColorSchemes;
+                    printf("Scheme switched to: %d\n", current_scheme);
+
+                    // 仅在非 MIDI 模式下预览配色
+                    if (!midi_connected) {
+                        // 点亮全部按键展示当前配色
+                        for (int i = 0; i < static_cast<int>(piano::NUM_LEDS); i++) {
+                            led::LedColor color = piano::key_color(i, current_scheme);
+                            led_ctrl.setKey(static_cast<uint>(i), color);
+                        }
+                        led_ctrl.update();
+                        preview_active = true;
+                        preview_start = now;
+                    }
+                }
+            }
+
+            if (pressed && bootsel_was_pressed) {
+                // 长按 3 秒 → 进入 bootloader
+                if (now - bootsel_press_start >= BOOTSEL_LONG_PRESS_MS) {
+                    printf("BOOTSEL held 3s, entering bootloader...\n");
+                    led_ctrl.clear();
+                    sleep_ms(100);
+                    rom_reset_usb_boot(0, 0);
+                }
+            }
+
+            bootsel_was_pressed = pressed;
+        }
+
+        // --- 配色预览超时处理 (非 MIDI 模式) ---
+        if (preview_active) {
+            if (now - preview_start >= PREVIEW_DURATION_MS) {
+                led_ctrl.setAllKeys(led::LedColor::OFF);
+                led_ctrl.update();
+                preview_active = false;
+                printf("Preview ended\n");
+            }
+            // 预览期间不跑跑马灯
+            if (!midi_connected) {
+                sleep_ms(1);
+                continue;
+            }
+        }
+
         // --- 连接状态变化处理 ---
         if (midi_connected && !was_connected) {
             // MIDI 设备刚接入 → 熄灭板载 LED
@@ -97,7 +177,8 @@ int main() {
             gpio_put(PICO_ONBOARD_LED, 0);
             onboard_led_on = false;
 
-            // 清空灯条，停止跑马灯
+            // 取消预览，清空灯条
+            preview_active = false;
             led_ctrl.setAllKeys(led::LedColor::OFF);
             led_ctrl.update();
             for (auto& n : active_notes) n = false;
@@ -138,8 +219,9 @@ int main() {
                         // 将 MIDI velocity (0~127) 映射为亮度 (0~255)
                         uint8_t brightness = static_cast<uint8_t>(
                             (static_cast<uint16_t>(e.velocity) * 255) / 127);
-                        led_ctrl.setKey(static_cast<uint>(idx),
-                                        led::LedColor::WHITE, brightness);
+                        // 根据当前配色方案选择白键/黑键颜色
+                        led::LedColor color = piano::key_color(idx, current_scheme);
+                        led_ctrl.setKey(static_cast<uint>(idx), color, brightness);
                         updated = true;
                     } else {
                         active_notes[idx] = false;
@@ -161,8 +243,10 @@ int main() {
                 onboard_led_off_at = 0;
             }
         } else {
-            // 跑马灯模式: 运行 chase 动画
-            animator.tick();
+            // 跑马灯模式: 运行 chase 动画 (预览期间跳过)
+            if (!preview_active) {
+                animator.tick();
+            }
         }
 
         sleep_ms(1);
