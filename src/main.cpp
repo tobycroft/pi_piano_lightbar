@@ -20,45 +20,49 @@ int main() {
     led::Ws2812 ws2812(pio0, 0, LED_PIN, NUM_LEDS, led::ColorOrder::GRBW);
 
     while (true) {
-        printf("RED\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 255, 0, 0);
+        // --- Channel 1: R only ---
+        printf("R channel only\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 255, 0, 0, 0);
         ws2812.write();
-        sleep_ms(1000);
-
-        printf("GREEN\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 255, 0);
-        ws2812.write();
-        sleep_ms(1000);
-
-        printf("BLUE\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 255);
-        ws2812.write();
-        sleep_ms(1000);
-
-        printf("WHITE (W ch)\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 255);
-        ws2812.write();
-        sleep_ms(1000);
-
-        printf("YELLOW\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 255, 255, 0);
-        ws2812.write();
-        sleep_ms(1000);
-
-        printf("CYAN\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 255, 255);
-        ws2812.write();
-        sleep_ms(1000);
-
-        printf("MAGENTA\n");
-        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 255, 0, 255);
-        ws2812.write();
-        sleep_ms(1000);
+        sleep_ms(3000);
 
         printf("OFF\n");
         for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 0);
         ws2812.write();
-        sleep_ms(1000);
+        sleep_ms(1500);
+
+        // --- Channel 2: G only ---
+        printf("G channel only\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 255, 0, 0);
+        ws2812.write();
+        sleep_ms(3000);
+
+        printf("OFF\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 0);
+        ws2812.write();
+        sleep_ms(1500);
+
+        // --- Channel 3: B only ---
+        printf("B channel only\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 255, 0);
+        ws2812.write();
+        sleep_ms(3000);
+
+        printf("OFF\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 0);
+        ws2812.write();
+        sleep_ms(1500);
+
+        // --- Channel 4: W only ---
+        printf("W channel only\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 255);
+        ws2812.write();
+        sleep_ms(3000);
+
+        printf("OFF\n");
+        for (uint i = 0; i < NUM_LEDS; i++) ws2812.set(i, 0, 0, 0, 0);
+        ws2812.write();
+        sleep_ms(2000);
     }
 
     return 0;
