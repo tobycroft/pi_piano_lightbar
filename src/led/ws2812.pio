@@ -1,9 +1,7 @@
 ; Standard WS2812/SK6812 LED driver PIO program
-; Timing conforms to WS2812/SK6812 datasheet specifications:
+; Timing: 800KHz bit rate, 9 SM cycles per bit
 ;   Bit 1: 5 high, 4 low  = ~690ns high, ~552ns low  @ 7.2MHz
 ;   Bit 0: 2 high, 7 low  = ~276ns high, ~966ns low  @ 7.2MHz
-;
-; Standard 800KHz bit rate, 9 SM cycles per bit.
 ;
 .program ws2812
 .side_set 1
