@@ -39,7 +39,7 @@ static UsbRole detect_role() {
 int main() {
     stdio_init_all();
 
-    // Onboard LED: confirm power and program is running
+    // Onboard LED: power indicator, lit when no device connected
     gpio_init(PICO_ONBOARD_LED);
     gpio_set_dir(PICO_ONBOARD_LED, GPIO_OUT);
     gpio_put(PICO_ONBOARD_LED, 1);
@@ -102,6 +102,7 @@ int main() {
 
     bool active_leds[NUM_LEDS] = {false};
     uint32_t led_on_time[NUM_LEDS] = {0};
+    uint32_t onboard_blink_until = 0;
 
     MidiChannelMode channel_mode = MidiChannelMode::All;
 
@@ -162,8 +163,11 @@ int main() {
 
         if (!midi_active) {
             // Host mode: wait for a USB MIDI device to be connected
+            // Onboard LED: solid ON (no device, idle)
+            gpio_put(PICO_ONBOARD_LED, 1);
             if (midi_in && midi_in->is_connected()) {
                 printf("USB MIDI detected, switching to MIDI mode...\n");
+                gpio_put(PICO_ONBOARD_LED, 0);
                 led_ctrl.clear_all();
                 midi_active = true;
                 continue;
@@ -185,6 +189,9 @@ int main() {
                     led_on_time[idx] = now;
                     led_ctrl.set_led(static_cast<uint>(idx), 255, 255, 255);
                     updated = true;
+                    // Onboard LED: flash on MIDI activity
+                    gpio_put(PICO_ONBOARD_LED, 1);
+                    onboard_blink_until = now + 50;
                 } else {
                     active_leds[idx] = false;
                     led_ctrl.clear_led(static_cast<uint>(idx));
@@ -202,6 +209,11 @@ int main() {
 
             if (updated) {
                 led_ctrl.update();
+            }
+
+            // Onboard LED: reset after blink timeout
+            if (now >= onboard_blink_until) {
+                gpio_put(PICO_ONBOARD_LED, 0);
             }
 
             if (midi_in && !midi_in->is_connected()) {
