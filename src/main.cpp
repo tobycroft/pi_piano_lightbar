@@ -55,26 +55,16 @@ int main() {
     led::LedController led_ctrl(ws2812);
     led::LedAnimator animator(led_ctrl);
 
-    // Startup LED test: verify strip connection with color sequence
-    printf("LED strip test: RED...\n");
-    for (uint i = 0; i < NUM_LEDS; i++) led_ctrl.set_led(i, 255, 0, 0);
+    // Startup LED test: single-LED chase to verify strip and limit inrush current
+    printf("LED strip test: single-LED chase...\n");
+    for (uint i = 0; i < NUM_LEDS; i++) {
+        led_ctrl.clear_all();
+        led_ctrl.set_led(i, 255, 255, 255);
+        led_ctrl.update();
+        sleep_ms(15);
+    }
+    led_ctrl.clear_all();
     led_ctrl.update();
-    sleep_ms(300);
-
-    printf("LED strip test: GREEN...\n");
-    for (uint i = 0; i < NUM_LEDS; i++) led_ctrl.set_led(i, 0, 255, 0);
-    led_ctrl.update();
-    sleep_ms(300);
-
-    printf("LED strip test: BLUE...\n");
-    for (uint i = 0; i < NUM_LEDS; i++) led_ctrl.set_led(i, 0, 0, 255);
-    led_ctrl.update();
-    sleep_ms(300);
-
-    printf("LED strip test: WHITE...\n");
-    for (uint i = 0; i < NUM_LEDS; i++) led_ctrl.set_led(i, 255, 255, 255);
-    led_ctrl.update();
-    sleep_ms(300);
 
     usb::UsbMidiDevice midi_device;
 #if CFG_TUH_ENABLED
