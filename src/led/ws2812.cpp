@@ -18,15 +18,16 @@ Ws2812::Ws2812(PIO pio, uint sm, uint pin, uint num_leds)
 
     pio_sm_claim(pio_, sm_);
     pio_gpio_init(pio_, pin_);
+    pio_sm_set_consecutive_pindirs(pio_, sm_, pin_, 1, true);
 
     pio_sm_config c = ws2812_program_get_default_config(offset);
     sm_config_set_sideset_pins(&c, pin_);
+    sm_config_set_set_pins(&c, pin_, 1);
     sm_config_set_out_shift(&c, false, true, 24);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
     // 9 SM cycles per bit, 800 kHz bit rate
-    // div = sys_clk / (9 * 800000)
-    float div = static_cast<float>(freq_) / 7200000.0f;
+    float div = static_cast<float>(freq_) / (800000.0f * 9.0f);
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(pio_, sm_, offset, &c);
