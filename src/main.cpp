@@ -48,7 +48,11 @@ int main() {
     led::LedController led_ctrl(ws2812);
     led::LedAnimator animator(led_ctrl);
 
-    led_ctrl.clear_all();
+    // Light up all LEDs white immediately (idle state: no device)
+    for (uint i = 0; i < NUM_LEDS; i++) {
+        led_ctrl.set_led(i, 255, 255, 255);
+    }
+    led_ctrl.update();
 
     usb::UsbMidiDevice midi_device;
 #if CFG_TUH_ENABLED
@@ -58,11 +62,16 @@ int main() {
     usb::UsbMidiIn* midi_in = nullptr;
     UsbRole role = detect_role();
 
+    bool midi_active = false;
+
 #if CFG_TUH_ENABLED
     if (role == UsbRole::Device) {
         printf("Role: Device (VBUS detected)\n");
         tud_init(TUD_OPT_RHPORT);
         midi_in = &midi_device;
+        // Device mode: the computer is always the "host", go to MIDI mode immediately
+        led_ctrl.clear_all();
+        midi_active = true;
     } else {
         printf("Role: Host (no VBUS)\n");
         if (midi_host.init()) {
@@ -70,8 +79,10 @@ int main() {
         } else {
             printf("Host init failed, trying device mode...\n");
             tud_init(TUD_OPT_RHPORT);
-            role = UsbRole::Device;
             midi_in = &midi_device;
+            role = UsbRole::Device;
+            led_ctrl.clear_all();
+            midi_active = true;
         }
     }
 #else
@@ -79,10 +90,10 @@ int main() {
     tud_init(TUD_OPT_RHPORT);
     midi_in = &midi_device;
     role = UsbRole::Device;
+    led_ctrl.clear_all();
+    midi_active = true;
 #endif
 
-    bool midi_active = false;
-    bool idle_leds_on = false;
     bool active_leds[NUM_LEDS] = {false};
     uint32_t led_on_time[NUM_LEDS] = {0};
 
@@ -144,21 +155,14 @@ int main() {
         }
 
         if (!midi_active) {
+            // Host mode: wait for a USB MIDI device to be connected
             if (midi_in && midi_in->is_connected()) {
                 printf("USB MIDI detected, switching to MIDI mode...\n");
                 led_ctrl.clear_all();
-                idle_leds_on = false;
                 midi_active = true;
                 continue;
             }
-
-            if (!idle_leds_on) {
-                for (uint i = 0; i < NUM_LEDS; i++) {
-                    led_ctrl.set_led(i, 255, 255, 255);
-                }
-                led_ctrl.update();
-                idle_leds_on = true;
-            }
+            // LEDs stay white (set at startup)
         } else {
             auto events = midi_in ? midi_in->poll() : std::vector<midi::MidiEvent>{};
             bool updated = false;
@@ -195,12 +199,16 @@ int main() {
             }
 
             if (midi_in && !midi_in->is_connected()) {
-                printf("USB MIDI disconnected, returning to test mode...\n");
+                printf("USB MIDI disconnected, returning to idle...\n");
                 led_ctrl.clear_all();
                 for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) active_leds[i] = false;
+                // Re-light all LEDs white for idle state
+                for (uint i = 0; i < NUM_LEDS; i++) {
+                    led_ctrl.set_led(i, 255, 255, 255);
+                }
+                led_ctrl.update();
                 midi_in->reset();
                 midi_active = false;
-                idle_leds_on = false;
             }
         }
 
