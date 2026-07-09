@@ -82,6 +82,7 @@ int main() {
 #endif
 
     bool midi_active = false;
+    bool idle_leds_on = false;
     bool active_leds[NUM_LEDS] = {false};
     uint32_t led_on_time[NUM_LEDS] = {0};
 
@@ -146,11 +147,18 @@ int main() {
             if (midi_in && midi_in->is_connected()) {
                 printf("USB MIDI detected, switching to MIDI mode...\n");
                 led_ctrl.clear_all();
+                idle_leds_on = false;
                 midi_active = true;
                 continue;
             }
 
-            animator.tick();
+            if (!idle_leds_on) {
+                for (uint i = 0; i < NUM_LEDS; i++) {
+                    led_ctrl.set_led(i, 255, 255, 255);
+                }
+                led_ctrl.update();
+                idle_leds_on = true;
+            }
         } else {
             auto events = midi_in ? midi_in->poll() : std::vector<midi::MidiEvent>{};
             bool updated = false;
@@ -192,6 +200,7 @@ int main() {
                 for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) active_leds[i] = false;
                 midi_in->reset();
                 midi_active = false;
+                idle_leds_on = false;
             }
         }
 
