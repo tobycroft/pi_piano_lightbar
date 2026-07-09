@@ -38,6 +38,7 @@ pico_sdk_init()
 set(SOURCES
     src/main.cpp
     src/led/ws2812.cpp
+    src/led/led_controller.cpp
     src/led/ws2812.pio
 )
 
