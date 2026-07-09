@@ -62,7 +62,7 @@ void Ws2812::write() {
                                 color_order_);
         } else {
             wire = rgb_to_wire(buf_[offset], buf_[offset + 1],
-                               buf_[offset + 2]);
+                               buf_[offset + 2], color_order_);
         }
         pio_sm_put_blocking(pio_, sm_, wire);
     }
@@ -80,10 +80,19 @@ void Ws2812::clear() {
     sleep_us(300);
 }
 
-uint32_t Ws2812::rgb_to_wire(uint8_t r, uint8_t g, uint8_t b) {
-    return (static_cast<uint32_t>(g) << 24) |
-           (static_cast<uint32_t>(r) << 16) |
-           (static_cast<uint32_t>(b) << 8);
+uint32_t Ws2812::rgb_to_wire(uint8_t r, uint8_t g, uint8_t b,
+                              ColorOrder order) {
+    switch (order) {
+        case ColorOrder::GRB:
+            return (static_cast<uint32_t>(g) << 16) |
+                   (static_cast<uint32_t>(r) << 8)  |
+                   static_cast<uint32_t>(b);
+        case ColorOrder::RGB:
+        default:
+            return (static_cast<uint32_t>(r) << 16) |
+                   (static_cast<uint32_t>(g) << 8)  |
+                   static_cast<uint32_t>(b);
+    }
 }
 
 uint32_t Ws2812::rgbw_to_wire(uint8_t r, uint8_t g, uint8_t b, uint8_t w,

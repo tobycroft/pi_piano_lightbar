@@ -28,7 +28,8 @@ public:
     uint num_leds() const { return num_leds_; }
     uint bytes_per_led() const { return bytes_per_led_; }
 
-    static uint32_t rgb_to_wire(uint8_t r, uint8_t g, uint8_t b);
+    static uint32_t rgb_to_wire(uint8_t r, uint8_t g, uint8_t b,
+                                 ColorOrder order);
     static uint32_t rgbw_to_wire(uint8_t r, uint8_t g, uint8_t b, uint8_t w,
                                   ColorOrder order);
 
