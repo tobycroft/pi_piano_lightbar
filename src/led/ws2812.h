@@ -21,8 +21,6 @@ private:
     uint pin_;
     uint num_leds_;
     uint8_t* buf_;
-
-    void put_pixel(uint8_t r, uint8_t g, uint8_t b);
 };
 
 } // namespace led

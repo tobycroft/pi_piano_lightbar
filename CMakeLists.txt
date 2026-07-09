@@ -30,14 +30,6 @@ include(pico_sdk_import.cmake)
 
 project(pi_piano_lightbar C CXX ASM)
 
-# RP2040 TinyUSB host mode requires PICO_USB_HOST flag.
-# This must be set before pico_sdk_init() to ensure the USB interrupt
-# handler is compiled for host mode.
-set(PICO_USB_HOST 1)
-
-# Enable USB Host mode (must match tusb_config.h)
-set(CFG_TUH_ENABLED 1)
-
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
@@ -46,16 +38,8 @@ pico_sdk_init()
 set(SOURCES
     src/main.cpp
     src/led/ws2812.cpp
-    src/led/led_controller.cpp
-    src/led/led_animator.cpp
-    src/midi/midi_parser.cpp
-    src/system/bootsel_button.c
     src/led/ws2812.pio
 )
-
-if(CFG_TUH_ENABLED)
-    list(APPEND SOURCES src/usb/usb_midi_host.cpp)
-endif()
 
 add_executable(pi_piano_lightbar ${SOURCES})
 
@@ -76,17 +60,10 @@ target_link_libraries(pi_piano_lightbar
         hardware_clocks
 )
 
-if(CFG_TUH_ENABLED)
-    target_link_libraries(pi_piano_lightbar tinyusb_host)
-endif()
-
 # Add the standard include files to the build
 target_include_directories(pi_piano_lightbar PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/src
 )
-
-# Ensure PICO_USB_HOST is defined for the compiler
-target_compile_definitions(pi_piano_lightbar PRIVATE PICO_USB_HOST=1)
 
 pico_add_extra_outputs(pi_piano_lightbar)
