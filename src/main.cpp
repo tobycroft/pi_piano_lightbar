@@ -15,8 +15,8 @@
 #endif
 #include "system/bootsel_button.h"
 
-// WS2812 data pin: can use GP0 or GP28 (whichever is easier to wire)
-static constexpr uint LED_PIN = 0;
+// WS2812 data pin: use GP28 (wired to the strip)
+static constexpr uint LED_PIN = 28;
 static constexpr uint NUM_LEDS = piano::NUM_LEDS;
 static constexpr uint VBUS_PIN = 24;
 static constexpr uint PICO_ONBOARD_LED = 25;
