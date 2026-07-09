@@ -1,0 +1,19 @@
+; WS2812 LED driver PIO program
+; Standard 800kHz timing for WS2812/SK6812
+; Cycle time = 125ns (@ 8MHz SM clock)
+;
+; Timing analysis at 8MHz (125ns/cycle):
+;   Bit=1: T1H = 625ns (5 cycles), T1L = 500ns (4 cycles)  ✓
+;   Bit=0: T0H = 250ns (2 cycles), T0L = 875ns (7 cycles)  ✓
+;   Total: 9 cycles = 1125ns (~890KHz, within tolerance)
+.program ws2812
+.side_set 1
+
+.wrap_target
+bitloop:
+    out x, 1       side 0 [3]
+    jmp !x, do_zero side 1 [1]
+    jmp bitloop     side 1 [2]
+do_zero:
+    nop side 0 [2]
+.wrap

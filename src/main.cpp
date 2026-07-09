@@ -8,11 +8,8 @@
 #include "led/ws2812.h"
 #include "led/led_controller.h"
 #include "led/led_animator.h"
-#include "usb/usb_midi_device.h"
-#include "usb/usb_midi.h"
-#if CFG_TUH_ENABLED
 #include "usb/usb_midi_host.h"
-#endif
+#include "usb/usb_midi.h"
 #include "system/bootsel_button.h"
 
 // WS2812 data pin: use GP28 (wired to the strip)
@@ -21,10 +18,8 @@ static constexpr uint NUM_LEDS = piano::NUM_LEDS;
 static constexpr uint VBUS_PIN = 24;
 static constexpr uint PICO_ONBOARD_LED = 25;
 
-enum class UsbRole {
-    Device,
-    Host
-};
+// Low brightness level for "always-on" background (0-255, very dim)
+static constexpr uint8_t BG_BRIGHTNESS = 5;
 
 enum class MidiChannelMode {
     All,
@@ -32,22 +27,24 @@ enum class MidiChannelMode {
     Ch4
 };
 
-static UsbRole detect_role() {
-    bool vbus = gpio_get(VBUS_PIN);
-    return vbus ? UsbRole::Device : UsbRole::Host;
-}
-
 int main() {
     stdio_init_all();
 
-    // Onboard LED: power indicator, lit when no device connected
+    // Initialize onboard LED (GP25) - power/status indicator
     gpio_init(PICO_ONBOARD_LED);
     gpio_set_dir(PICO_ONBOARD_LED, GPIO_OUT);
-    gpio_put(PICO_ONBOARD_LED, 1);
+    gpio_put(PICO_ONBOARD_LED, 1);  // Initially ON (no device)
 
+    // Initialize WS2812 data pin (GP28) explicitly
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, GPIO_OUT);
+
+    // Initialize VBUS sense pin (GP24) for monitoring
+    // Note: The Pico's VBUS pin already has an external voltage divider
+    // (100k/100k to GND), so do NOT add a pull-down here.
     gpio_init(VBUS_PIN);
     gpio_set_dir(VBUS_PIN, GPIO_IN);
-    gpio_pull_down(VBUS_PIN);
+    // No pull-up or pull-down - VBUS has external divider to GND
 
     printf("=== Piano LED MIDI Guidance (C++) ===\n");
 
@@ -55,56 +52,28 @@ int main() {
     led::LedController led_ctrl(ws2812);
     led::LedAnimator animator(led_ctrl);
 
-    // Startup LED test: single-LED chase to verify strip and limit inrush current
-    printf("LED strip test: single-LED chase...\n");
+    // Startup: set all LEDs to low brightness (always-on background)
+    // This verifies the strip connection and provides a constant dim glow
+    printf("LED strip: low brightness all-on (background)\n");
     for (uint i = 0; i < NUM_LEDS; i++) {
-        led_ctrl.clear_all();
-        led_ctrl.set_led(i, 255, 255, 255);
-        led_ctrl.update();
-        sleep_ms(15);
+        led_ctrl.set_led(i, BG_BRIGHTNESS, BG_BRIGHTNESS, BG_BRIGHTNESS);
     }
-    led_ctrl.clear_all();
     led_ctrl.update();
 
-    usb::UsbMidiDevice midi_device;
-#if CFG_TUH_ENABLED
     usb::UsbMidiHost midi_host;
-#endif
-
-    usb::UsbMidiIn* midi_in = nullptr;
-    UsbRole role = detect_role();
-
+    usb::UsbMidiIn* midi_in = &midi_host;
     bool midi_active = false;
 
-#if CFG_TUH_ENABLED
-    if (role == UsbRole::Device) {
-        printf("Role: Device (VBUS detected)\n");
-        tud_init(TUD_OPT_RHPORT);
-        midi_in = &midi_device;
-        // Device mode: the computer is always the "host", go to MIDI mode immediately
-        led_ctrl.clear_all();
-        midi_active = true;
+    // ------------------------------------------------------------------
+    // USB initialization: host mode only (USB MIDI controller)
+    // ------------------------------------------------------------------
+    tusb_init();
+
+    if (midi_host.init()) {
+        printf("Mode: USB Host (waiting for MIDI device)\n");
     } else {
-        printf("Role: Host (no VBUS)\n");
-        if (midi_host.init()) {
-            midi_in = &midi_host;
-        } else {
-            printf("Host init failed, trying device mode...\n");
-            tud_init(TUD_OPT_RHPORT);
-            midi_in = &midi_device;
-            role = UsbRole::Device;
-            led_ctrl.clear_all();
-            midi_active = true;
-        }
+        printf("ERROR: USB Host init failed\n");
     }
-#else
-    printf("Role: Device (VBUS detected)\n");
-    tud_init(TUD_OPT_RHPORT);
-    midi_in = &midi_device;
-    role = UsbRole::Device;
-    led_ctrl.clear_all();
-    midi_active = true;
-#endif
 
     bool active_leds[NUM_LEDS] = {false};
     uint32_t led_on_time[NUM_LEDS] = {0};
@@ -116,21 +85,15 @@ int main() {
     bool bootsel_was_pressed = false;
     uint32_t last_bootsel_check = 0;
 
-    printf("LED test running, waiting for USB MIDI...\n");
+    printf("Waiting for USB MIDI...\n");
 
     while (true) {
-#if CFG_TUH_ENABLED
-        if (role == UsbRole::Device) {
-            tud_task();
-        } else {
-            tuh_task();
-        }
-#else
-        tud_task();
-#endif
+        // Process TinyUSB host events
+        tuh_task();
 
         uint32_t now = to_ms_since_boot(get_absolute_time());
 
+        // BOOTSEL button handling (every 100ms)
         if (now - last_bootsel_check >= 100) {
             last_bootsel_check = now;
             bool pressed = bootsel_button_is_pressed();
@@ -167,6 +130,9 @@ int main() {
             bootsel_was_pressed = pressed;
         }
 
+        // ------------------------------------------------------------------
+        // State machine: idle (no MIDI device) vs active (MIDI connected)
+        // ------------------------------------------------------------------
         if (!midi_active) {
             // Host mode: wait for a USB MIDI device to be connected
             // Onboard LED: solid ON (no device, idle)
@@ -174,11 +140,10 @@ int main() {
             if (midi_in && midi_in->is_connected()) {
                 printf("USB MIDI detected, switching to MIDI mode...\n");
                 gpio_put(PICO_ONBOARD_LED, 0);
-                led_ctrl.clear_all();
+                // Keep low brightness background - MIDI events will highlight individual notes
                 midi_active = true;
                 continue;
             }
-            // LEDs stay white (set at startup)
         } else {
             auto events = midi_in ? midi_in->poll() : std::vector<midi::MidiEvent>{};
             bool updated = false;
@@ -200,15 +165,17 @@ int main() {
                     onboard_blink_until = now + 50;
                 } else {
                     active_leds[idx] = false;
-                    led_ctrl.clear_led(static_cast<uint>(idx));
+                    // Return to low brightness background instead of turning off
+                    led_ctrl.set_led(static_cast<uint>(idx), BG_BRIGHTNESS, BG_BRIGHTNESS, BG_BRIGHTNESS);
                     updated = true;
                 }
             }
 
+            // LED timeout: return to low brightness after 50ms of no MIDI activity
             for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) {
                 if (active_leds[i] && (now - led_on_time[i] >= 50)) {
                     active_leds[i] = false;
-                    led_ctrl.clear_led(static_cast<uint>(i));
+                    led_ctrl.set_led(static_cast<uint>(i), BG_BRIGHTNESS, BG_BRIGHTNESS, BG_BRIGHTNESS);
                     updated = true;
                 }
             }
@@ -222,15 +189,15 @@ int main() {
                 gpio_put(PICO_ONBOARD_LED, 0);
             }
 
+            // Check for device disconnection
             if (midi_in && !midi_in->is_connected()) {
                 printf("USB MIDI disconnected, returning to idle...\n");
-                led_ctrl.clear_all();
-                for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) active_leds[i] = false;
-                // Re-light all LEDs white for idle state
+                // Return to low brightness background
                 for (uint i = 0; i < NUM_LEDS; i++) {
-                    led_ctrl.set_led(i, 255, 255, 255);
+                    led_ctrl.set_led(i, BG_BRIGHTNESS, BG_BRIGHTNESS, BG_BRIGHTNESS);
                 }
                 led_ctrl.update();
+                for (int i = 0; i < static_cast<int>(NUM_LEDS); i++) active_leds[i] = false;
                 midi_in->reset();
                 midi_active = false;
             }

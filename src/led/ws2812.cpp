@@ -1,19 +1,10 @@
 #include "ws2812.h"
+#include "ws2812.pio.h"
 #include <cstring>
 #include "hardware/clocks.h"
 #include "pico/time.h"
 
 namespace led {
-
-static const uint16_t ws2812_program_instructions[] = {
-    0x6221, 0x1123, 0x1400, 0xa042
-};
-
-static const struct pio_program ws2812_program = {
-    .instructions = ws2812_program_instructions,
-    .length = 4,
-    .origin = -1,
-};
 
 static uint32_t rgb_to_grb(uint8_t r, uint8_t g, uint8_t b) {
     return (static_cast<uint32_t>(g) << 16) |
@@ -25,24 +16,31 @@ Ws2812::Ws2812(PIO pio, uint sm, uint pin, uint num_leds)
     : pio_(pio), sm_(sm), pin_(pin), num_leds_(num_leds) {
     buf_ = new uint8_t[num_leds_ * 3]();
 
+    // Use the pioasm-generated program
     uint offset = pio_add_program(pio_, &ws2812_program);
     pio_sm_claim(pio_, sm_);
 
+    // Initialize GPIO for PIO
     pio_gpio_init(pio_, pin_);
     pio_sm_set_consecutive_pindirs(pio_, sm_, pin_, 1, true);
 
-    pio_sm_config c = pio_get_default_sm_config();
-    sm_config_set_wrap(&c, offset, offset + ws2812_program.length - 1);
-    sm_config_set_sideset(&c, 1, false, false);
+    // Get default config from generated header
+    pio_sm_config c = ws2812_program_get_default_config(offset);
+
+    // Configure OUT shift: shift left, autopull enabled, threshold 24 bits
     sm_config_set_out_shift(&c, false, true, 24);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
-    float div = clock_get_hz(clk_sys) / (800000.0f * 10.0f);
+    // SM clock: 800KHz bit rate, ~9 cycles per bit → ~7.2MHz
+    // div = sysclk / (800000 * 9)  → gives ~17.36 for 125MHz sysclk
+    float div = clock_get_hz(clk_sys) / (800000.0f * 9.0f);
     sm_config_set_clkdiv(&c, div);
 
+    // Set the pin mapping for SET and sideset
     sm_config_set_set_pins(&c, pin_, 1);
     sm_config_set_sideset_pins(&c, pin_);
 
+    // Initialize and enable the state machine
     pio_sm_init(pio_, sm_, offset, &c);
     pio_sm_set_enabled(pio_, sm_, true);
 }
@@ -72,7 +70,9 @@ void Ws2812::write() {
         uint32_t grb = rgb_to_grb(buf_[offset], buf_[offset + 1], buf_[offset + 2]);
         pio_sm_put_blocking(pio_, sm_, grb);
     }
-    sleep_us(60);
+    // RESET pulse: data line stays low to signal end of frame
+    // WS2812 needs >280μs, SK6812 needs >80μs; use 300μs to be safe for both
+    sleep_us(300);
 }
 
 void Ws2812::put_pixel(uint8_t r, uint8_t g, uint8_t b) {

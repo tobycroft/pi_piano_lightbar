@@ -10,6 +10,8 @@ namespace usb {
 
 UsbMidiHost* s_instance = nullptr;
 
+// These are friend functions of UsbMidiHost, declared with C++ linkage in the header.
+// They are passed as function pointers to TinyUSB, so linkage type is compatible.
 void xfer_callback_internal(tuh_xfer_t* xfer) {
     if (!s_instance) return;
 
@@ -21,6 +23,28 @@ void xfer_callback_internal(tuh_xfer_t* xfer) {
     s_instance->start_receive();
 }
 
+void config_complete_cb(tuh_xfer_t* xfer) {
+    if (!s_instance) return;
+
+    if (xfer->result == XFER_RESULT_SUCCESS) {
+        printf("USB Host: configuration set complete, opening endpoint...\n");
+        // Configuration is now set; open the IN endpoint with the saved descriptor
+        if (tuh_edpt_open(xfer->daddr, &s_instance->ep_in_desc_)) {
+            printf("USB Host: MIDI IN endpoint opened, ep=0x%02x attr=0x%02x size=%d\n",
+                   s_instance->ep_in_desc_.bEndpointAddress,
+                   s_instance->ep_in_desc_.bmAttributes,
+                   s_instance->ep_in_desc_.wMaxPacketSize);
+            s_instance->start_receive();
+        } else {
+            printf("USB Host: failed to open endpoint\n");
+            s_instance->connected_ = false;
+        }
+    } else {
+        printf("USB Host: set configuration failed (result=%d)\n", xfer->result);
+        s_instance->connected_ = false;
+    }
+}
+
 UsbMidiHost::UsbMidiHost() {
     s_instance = this;
 }
@@ -28,17 +52,10 @@ UsbMidiHost::UsbMidiHost() {
 bool UsbMidiHost::init() {
     if (inited_) return true;
 
-    tusb_rhport_init_t host_init = {
-        .role = TUSB_ROLE_HOST,
-        .speed = TUSB_SPEED_FULL
-    };
-    if (!tuh_rhport_init(TUH_OPT_RHPORT, &host_init)) {
-        printf("USB Host: init failed\n");
-        return false;
-    }
-
+    // TinyUSB is initialized globally via tusb_init() in main()
+    // Host stack events are processed via tuh_task() in the main loop
     inited_ = true;
-    printf("USB Host: initialized\n");
+    printf("USB Host: ready\n");
     return true;
 }
 
@@ -143,8 +160,10 @@ void UsbMidiHost::on_mount(uint8_t daddr, tusb_desc_device_t const* desc) {
             tusb_desc_interface_t const* itf = (tusb_desc_interface_t const*) p_cfg;
 
             if (itf->bInterfaceClass == TUSB_CLASS_AUDIO &&
-                itf->bInterfaceSubClass == AUDIO_SUBCLASS_MIDI_STREAMING) {
+                itf->bInterfaceSubClass == 0x03) { // AUDIO_SUBCLASS_MIDI_STREAMING
                 found = true;
+                printf("USB Host: found MIDI interface (class=%02x, subclass=%02x)\n",
+                       itf->bInterfaceClass, itf->bInterfaceSubClass);
             }
         }
 
@@ -154,8 +173,10 @@ void UsbMidiHost::on_mount(uint8_t daddr, tusb_desc_device_t const* desc) {
             if (ep->bEndpointAddress & 0x80) {
                 ep_in = ep->bEndpointAddress;
                 ep_in_size = ep->wMaxPacketSize;
+                printf("USB Host: found IN endpoint 0x%02x, size=%d\n", ep_in, ep_in_size);
             } else {
                 ep_out = ep->bEndpointAddress;
+                printf("USB Host: found OUT endpoint 0x%02x\n", ep_out);
             }
         }
 
@@ -168,30 +189,42 @@ void UsbMidiHost::on_mount(uint8_t daddr, tusb_desc_device_t const* desc) {
         ep_in_ = ep_in;
         ep_in_size_ = ep_in_size;
 
-        // Set configuration first
+        // Save the actual endpoint descriptor from the device
+        // (including correct transfer type: interrupt vs bulk)
+        // We need to search for it again since we only have the pointer
+        // from the parsing loop above
+        p_cfg = cfg_buf + cfg->bLength;
+        bool ep_found = false;
+        while (p_cfg < end && !ep_found) {
+            uint8_t desc_len = p_cfg[0];
+            uint8_t desc_type = p_cfg[1];
+            if (desc_len == 0) break;
+            if (desc_type == TUSB_DESC_ENDPOINT) {
+                tusb_desc_endpoint_t const* ep = (tusb_desc_endpoint_t const*)p_cfg;
+                if (ep->bEndpointAddress == ep_in) {
+                    memcpy(&ep_in_desc_, ep, sizeof(tusb_desc_endpoint_t));
+                    ep_found = true;
+                    printf("USB Host: saved endpoint desc: addr=0x%02x attr=0x%02x size=%d interval=%d\n",
+                           ep_in_desc_.bEndpointAddress,
+                           ep_in_desc_.bmAttributes,
+                           ep_in_desc_.wMaxPacketSize,
+                           ep_in_desc_.bInterval);
+                }
+            }
+            p_cfg += desc_len;
+        }
+
+        // Set configuration with callback.
+        // When the callback fires, we open the endpoint and start receiving.
+        // This ensures the device is configured before we try to use endpoints.
         uint8_t config_value = cfg->bConfigurationValue;
-        uint8_t cfg_result;
-        if (!tuh_configuration_set(daddr, config_value, NULL, (uintptr_t)&cfg_result) ||
-            cfg_result != XFER_RESULT_SUCCESS) {
-            printf("USB Host: set configuration failed\n");
+        printf("USB Host: setting configuration %d...\n", config_value);
+        if (!tuh_configuration_set(daddr, config_value, config_complete_cb, (uintptr_t)this)) {
+            printf("USB Host: set configuration request failed\n");
             connected_ = false;
             return;
         }
-
-        tusb_desc_endpoint_t ep_desc = {};
-        ep_desc.bLength = sizeof(tusb_desc_endpoint_t);
-        ep_desc.bDescriptorType = TUSB_DESC_ENDPOINT;
-        ep_desc.bEndpointAddress = ep_in;
-        ep_desc.bmAttributes = {.xfer = TUSB_XFER_BULK};
-        ep_desc.wMaxPacketSize = ep_in_size;
-
-        if (tuh_edpt_open(daddr, &ep_desc)) {
-            printf("USB Host: MIDI IN endpoint opened, ep=0x%02x size=%d\n", ep_in, ep_in_size);
-            start_receive();
-        } else {
-            printf("USB Host: failed to open endpoint\n");
-            connected_ = false;
-        }
+        // Endpoint will be opened in config_complete_cb
     } else {
         printf("USB Host: no MIDI device found\n");
     }
@@ -206,20 +239,29 @@ void UsbMidiHost::on_umount(uint8_t daddr) {
 
 } // namespace usb
 
+// --------------------------------------------------------------------
+// TinyUSB Host callbacks (called from tuh_task())
+// --------------------------------------------------------------------
 extern "C" {
 
 static tusb_desc_device_t s_dev_desc;
 
 void tuh_mount_cb(uint8_t daddr) {
+    printf("USB Host: tuh_mount_cb addr=%d\n", daddr);
+    printf("USB Host: tuh_mount_cb received, calling tuh_descriptor_get_device_sync...\n");
     uint8_t result = tuh_descriptor_get_device_sync(daddr, &s_dev_desc, sizeof(s_dev_desc));
+    printf("USB Host: tuh_descriptor_get_device_sync result=%d\n", result);
     if (result != XFER_RESULT_SUCCESS) {
         printf("USB Host: failed to get device descriptor\n");
         return;
     }
+    printf("USB Host: device VID=%04x PID=%04x\n", s_dev_desc.idVendor, s_dev_desc.idProduct);
     usb::s_instance->on_mount(daddr, &s_dev_desc);
 }
 
 void tuh_umount_cb(uint8_t daddr) {
+    printf("USB Host: tuh_umount_cb addr=%d\n", daddr);
+    printf("USB Host: device unmounted\n");
     usb::s_instance->on_umount(daddr);
 }
 

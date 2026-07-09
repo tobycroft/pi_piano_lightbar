@@ -30,11 +30,16 @@ include(pico_sdk_import.cmake)
 
 project(pi_piano_lightbar C CXX ASM)
 
-# Initialise the Raspberry Pi Pico SDK
-pico_sdk_init()
+# RP2040 TinyUSB host mode requires PICO_USB_HOST flag.
+# This must be set before pico_sdk_init() to ensure the USB interrupt
+# handler is compiled for host mode.
+set(PICO_USB_HOST 1)
 
 # Enable USB Host mode (must match tusb_config.h)
 set(CFG_TUH_ENABLED 1)
+
+# Initialise the Raspberry Pi Pico SDK
+pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
@@ -44,9 +49,8 @@ set(SOURCES
     src/led/led_controller.cpp
     src/led/led_animator.cpp
     src/midi/midi_parser.cpp
-    src/usb/usb_midi_device.cpp
     src/system/bootsel_button.c
-    usb_descriptors.c
+    src/led/ws2812.pio
 )
 
 if(CFG_TUH_ENABLED)
@@ -54,6 +58,9 @@ if(CFG_TUH_ENABLED)
 endif()
 
 add_executable(pi_piano_lightbar ${SOURCES})
+
+# Auto-generate PIO header from ws2812.pio
+pico_generate_pio_header(pi_piano_lightbar ${CMAKE_CURRENT_LIST_DIR}/src/led/ws2812.pio)
 
 pico_set_program_name(pi_piano_lightbar "pi_piano_lightbar")
 pico_set_program_version(pi_piano_lightbar "0.1")
@@ -67,7 +74,6 @@ target_link_libraries(pi_piano_lightbar
         pico_stdlib
         hardware_pio
         hardware_clocks
-        tinyusb_device
 )
 
 if(CFG_TUH_ENABLED)
@@ -79,5 +85,8 @@ target_include_directories(pi_piano_lightbar PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/src
 )
+
+# Ensure PICO_USB_HOST is defined for the compiler
+target_compile_definitions(pi_piano_lightbar PRIVATE PICO_USB_HOST=1)
 
 pico_add_extra_outputs(pi_piano_lightbar)

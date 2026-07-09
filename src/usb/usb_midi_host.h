@@ -24,6 +24,7 @@ public:
 
 private:
     friend void xfer_callback_internal(tuh_xfer_t* xfer);
+    friend void config_complete_cb(tuh_xfer_t* xfer);
 
     midi::MidiParser parser_;
 
@@ -33,6 +34,10 @@ private:
     uint8_t dev_addr_ = 0;
     uint8_t ep_in_ = 0;
     uint8_t ep_in_size_ = 0;
+
+    // Save the actual endpoint descriptor from the device
+    // so we can use the correct transfer type (interrupt vs bulk)
+    tusb_desc_endpoint_t ep_in_desc_ = {};
 
     static constexpr size_t RX_BUFFER_SIZE = 64;
     uint8_t rx_buffer_[RX_BUFFER_SIZE] = {};
