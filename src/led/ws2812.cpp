@@ -5,10 +5,12 @@
 
 namespace led {
 
+// Convert RGB to wire format.
+// Detected strip format: RBG (Red byte, Blue byte, Green byte)
 static uint32_t rgb_to_grb(uint8_t r, uint8_t g, uint8_t b) {
-    return (static_cast<uint32_t>(g) << 16) |
-           (static_cast<uint32_t>(r) << 8) |
-           static_cast<uint32_t>(b);
+    return (static_cast<uint32_t>(r) << 16) |
+           (static_cast<uint32_t>(b) << 8) |
+           static_cast<uint32_t>(g);
 }
 
 Ws2812::Ws2812(PIO pio, uint sm, uint pin, uint num_leds)
