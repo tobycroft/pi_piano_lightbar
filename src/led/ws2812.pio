@@ -1,20 +1,18 @@
-; Universal LED driver PIO program
-; Compatible with WS2812, SK6812, SM16703
+; Standard WS2812/SK6812 LED driver PIO program
+; Timing conforms to WS2812/SK6812 datasheet specifications:
+;   Bit 1: 5 high, 4 low  = ~690ns high, ~552ns low  @ 7.2MHz
+;   Bit 0: 2 high, 7 low  = ~276ns high, ~966ns low  @ 7.2MHz
 ;
-; Uses a balanced timing that works across different chips:
-;   Bit 1: 6 high, 3 low  = ~830ns high, ~415ns low  @ 7.2MHz
-;   Bit 0: 3 high, 6 low  = ~415ns high, ~830ns low  @ 7.2MHz
-;
-; This is within tolerance for both WS2812 and SM16703 families.
+; Standard 800KHz bit rate, 9 SM cycles per bit.
 ;
 .program ws2812
 .side_set 1
 
 .wrap_target
 bitloop:
-    out x, 1       side 0 [2]    ; 3 cycles LOW (side 0)
-    jmp !x, do_zero side 1 [2]   ; 3 cycles HIGH (side 1)
-    jmp bitloop     side 1 [2]   ; 3 cycles HIGH (side 1)
+    out x, 1       side 0 [3]
+    jmp !x, do_zero side 1 [1]
+    jmp bitloop     side 1 [2]
 do_zero:
-    nop side 0 [2]               ; 3 cycles LOW (side 0)
+    nop side 0 [2]
 .wrap
