@@ -45,7 +45,7 @@ LedController::RGB LedController::colorToRgb(LedColor color) {
         case LedColor::LAKE_BLUE:   return {0, 180, 255};     // 湖蓝色: 青+蓝
         case LedColor::GRASS_GREEN: return {60, 255, 30};     // 青草绿: 绿为主+少量红
         case LedColor::PINK:        return {255, 80, 180};    // 粉色: 红+蓝
-        case LedColor::PURPLE:      return {160, 0, 255};     // 紫色: 红+蓝，蓝偏多
+        case LedColor::PURPLE:      return {100, 0, 255};     // 紫色: 蓝为主+少量红
         case LedColor::OFF:
         default:                    return {0, 0, 0};
     }
