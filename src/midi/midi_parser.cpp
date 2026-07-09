@@ -49,13 +49,15 @@ bool MidiParser::try_parse_message() {
         return false;
     }
 
-    size_t needed = 2;
+    // USB MIDI packet buffer layout: {status, data1, data2}
+    // buffer_[0] = status byte (e.g. 0x90), buffer_[1] = note, buffer_[2] = velocity
+    size_t needed = 3;
     if (buffer_len_ < needed) {
         return false;
     }
 
-    uint8_t note = buffer_[0] & 0x7F;
-    uint8_t velocity = buffer_[1] & 0x7F;
+    uint8_t note = buffer_[1] & 0x7F;
+    uint8_t velocity = buffer_[2] & 0x7F;
 
     MidiEvent event;
     event.note = note;

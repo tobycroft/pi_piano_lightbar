@@ -160,9 +160,9 @@ int main() {
                     led_on_time[idx] = now;
                     led_ctrl.set_led(static_cast<uint>(idx), 255, 255, 255);
                     updated = true;
-                    // Onboard LED: flash on MIDI activity
+                    // Onboard LED: flash on MIDI activity (80ms)
                     gpio_put(PICO_ONBOARD_LED, 1);
-                    onboard_blink_until = now + 50;
+                    onboard_blink_until = now + 80;
                 } else {
                     active_leds[idx] = false;
                     // Return to low brightness background instead of turning off
