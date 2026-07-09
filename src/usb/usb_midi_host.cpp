@@ -168,6 +168,16 @@ void UsbMidiHost::on_mount(uint8_t daddr, tusb_desc_device_t const* desc) {
         ep_in_ = ep_in;
         ep_in_size_ = ep_in_size;
 
+        // Set configuration first
+        uint8_t config_value = cfg->bConfigurationValue;
+        uint8_t cfg_result;
+        if (!tuh_configuration_set(daddr, config_value, NULL, (uintptr_t)&cfg_result) ||
+            cfg_result != XFER_RESULT_SUCCESS) {
+            printf("USB Host: set configuration failed\n");
+            connected_ = false;
+            return;
+        }
+
         tusb_desc_endpoint_t ep_desc = {};
         ep_desc.bLength = sizeof(tusb_desc_endpoint_t);
         ep_desc.bDescriptorType = TUSB_DESC_ENDPOINT;

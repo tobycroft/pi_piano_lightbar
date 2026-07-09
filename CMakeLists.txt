@@ -33,6 +33,9 @@ project(pi_piano_lightbar C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+# Enable USB Host mode (must match tusb_config.h)
+set(CFG_TUH_ENABLED 1)
+
 # Add executable. Default name is the project name, version 0.1
 
 set(SOURCES
