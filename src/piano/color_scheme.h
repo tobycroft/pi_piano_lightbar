@@ -50,6 +50,8 @@ static constexpr ColorScheme kColorSchemes[] = {
     { led::LedColor::WHITE, led::LedColor::LAKE_BLUE },
     // 方案 2: 白键=青, 黑键=品红
     { led::LedColor::CYAN, led::LedColor::MAGENTA },
+    // 方案 3: 白键=湖蓝, 黑键=青草绿
+    { led::LedColor::LAKE_BLUE, led::LedColor::GRASS_GREEN },
 };
 
 static constexpr int kNumColorSchemes =
