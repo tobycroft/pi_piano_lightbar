@@ -66,6 +66,7 @@ target_link_libraries(pi_piano_lightbar
         hardware_clocks
         hardware_flash
         hardware_sync
+        hardware_adc
         tinyusb_host
 )
 

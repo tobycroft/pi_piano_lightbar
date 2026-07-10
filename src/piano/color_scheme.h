@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include "led/led_controller.h"
 
 namespace piano {
@@ -38,20 +39,44 @@ inline led::LedColor key_color(int index, int scheme_index);
 // 配色方案定义
 // =============================================================================
 
+// 用于随机颜色模式的颜色列表
+static constexpr led::LedColor kRandomColors[] = {
+    led::LedColor::RED,
+    led::LedColor::GREEN,
+    led::LedColor::BLUE,
+    led::LedColor::WHITE,
+    led::LedColor::YELLOW,
+    led::LedColor::CYAN,
+    led::LedColor::ORANGE,
+    led::LedColor::MAGENTA,
+    led::LedColor::LAKE_BLUE,
+    led::LedColor::GRASS_GREEN,
+    led::LedColor::PINK,
+    led::LedColor::PURPLE,
+    led::LedColor::WARM_WHITE,
+    led::LedColor::GOLD,
+};
+
+static constexpr int kNumRandomColors =
+    sizeof(kRandomColors) / sizeof(kRandomColors[0]);
+
 struct ColorScheme {
     led::LedColor white_key;
     led::LedColor black_key;
+    bool is_random;
 };
 
 static constexpr ColorScheme kColorSchemes[] = {
     // 方案 0: 白键=白, 黑键=青草绿
-    { led::LedColor::WHITE, led::LedColor::GRASS_GREEN },
+    { led::LedColor::WHITE, led::LedColor::GRASS_GREEN, false },
     // 方案 1: 白键=白, 黑键=湖蓝
-    { led::LedColor::WHITE, led::LedColor::LAKE_BLUE },
+    { led::LedColor::WHITE, led::LedColor::LAKE_BLUE, false },
     // 方案 2: 白键=青, 黑键=品红
-    { led::LedColor::CYAN, led::LedColor::MAGENTA },
+    { led::LedColor::CYAN, led::LedColor::MAGENTA, false },
     // 方案 3: 白键=湖蓝, 黑键=青草绿
-    { led::LedColor::LAKE_BLUE, led::LedColor::GRASS_GREEN },
+    { led::LedColor::LAKE_BLUE, led::LedColor::GRASS_GREEN, false },
+    // 方案 4: 随机颜色 — 每次按键使用随机颜色
+    { led::LedColor::OFF, led::LedColor::OFF, true },
 };
 
 static constexpr int kNumColorSchemes =
@@ -62,6 +87,10 @@ inline led::LedColor key_color(int index, int scheme_index) {
         scheme_index = 0;
     }
     const auto& scheme = kColorSchemes[scheme_index];
+    if (scheme.is_random) {
+        // 在预定义颜色列表中随机选择一个颜色
+        return kRandomColors[rand() % kNumRandomColors];
+    }
     return is_white_key_by_index(index) ? scheme.white_key : scheme.black_key;
 }
 
