@@ -42,6 +42,7 @@ set(SOURCES
     src/led/led_animator.cpp
     src/midi/midi_parser.cpp
     src/system/bootsel_button.c
+    src/system/flash_storage.c
     src/usb/usb_midi_host.cpp
     src/led/ws2812.pio
 )
@@ -63,6 +64,8 @@ target_link_libraries(pi_piano_lightbar
         pico_stdlib
         hardware_pio
         hardware_clocks
+        hardware_flash
+        hardware_sync
         tinyusb_host
 )
 

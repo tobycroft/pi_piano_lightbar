@@ -32,6 +32,7 @@
 #include "led/led_animator.h"
 #include "usb/usb_midi_host.h"
 #include "system/bootsel_button.h"
+#include "system/flash_storage.h"
 
 // 硬件引脚定义
 static constexpr uint LED_PIN = 28;           // WS2812 数据引脚
@@ -57,6 +58,9 @@ int main() {
     gpio_set_dir(PICO_ONBOARD_LED, GPIO_OUT);
     gpio_put(PICO_ONBOARD_LED, 1);
 
+    // 初始化 flash 存储并加载上次保存的配色方案
+    flash_storage_init();
+    int saved_scheme = flash_storage_load_scheme(0);
     printf("=== Piano LED MIDI Controller ===\n");
     printf("LED strip: GPIO%d, %d LEDs\n", LED_PIN, piano::NUM_LEDS);
 
@@ -95,7 +99,7 @@ int main() {
     bool active_notes[piano::NUM_LEDS] = {false};
 
     // 配色方案状态
-    int current_scheme = 0;          // 当前配色方案索引
+    int current_scheme = saved_scheme;  // 从 flash 加载的配色方案索引
     bool preview_active = false;     // 是否正在预览配色
     uint32_t preview_start = 0;      // 预览开始时间
 
@@ -127,6 +131,7 @@ int main() {
                 if (now - bootsel_press_start < BOOTSEL_LONG_PRESS_MS) {
                     current_scheme = (current_scheme + 1) % piano::kNumColorSchemes;
                     printf("Scheme switched to: %d\n", current_scheme);
+                    flash_storage_save_scheme(current_scheme);
 
                     // 仅在非 MIDI 模式下预览配色
                     if (!midi_connected) {
