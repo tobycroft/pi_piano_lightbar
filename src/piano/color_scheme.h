@@ -48,12 +48,8 @@ static constexpr ColorScheme kColorSchemes[] = {
     { led::LedColor::WHITE, led::LedColor::GRASS_GREEN },
     // 方案 1: 白键=白, 黑键=湖蓝
     { led::LedColor::WHITE, led::LedColor::LAKE_BLUE },
-    // 方案 2: 白键=暖白, 黑键=金色
-    { led::LedColor::WARM_WHITE, led::LedColor::GOLD },
-    // 方案 3: 白键=青, 黑键=品红
+    // 方案 2: 白键=青, 黑键=品红
     { led::LedColor::CYAN, led::LedColor::MAGENTA },
-    // 方案 4: 白键=黄, 黑键=橙
-    { led::LedColor::YELLOW, led::LedColor::ORANGE },
 };
 
 static constexpr int kNumColorSchemes =
