@@ -22,9 +22,9 @@
 #include <cstdlib>
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
+#include "pico/rand.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
-#include "hardware/adc.h"
 #include "tusb.h"
 
 #include "piano/piano_config.h"
@@ -52,20 +52,6 @@ static constexpr uint32_t BOOTSEL_LONG_PRESS_MS = 3000;
 // BOOTSEL 检测间隔 (ms)
 static constexpr uint32_t BOOTSEL_CHECK_INTERVAL_MS = 100;
 
-// 获取真随机种子 - 使用 ADC 读取未连接引脚的噪声
-static uint32_t get_random_seed() {
-    // 读取内部温度传感器作为随机源
-    adc_init();
-    adc_gpio_init(26);
-    adc_select_input(4);
-    uint32_t seed = 0;
-    for (int i = 0; i < 32; i++) {
-        seed = (seed << 1) | (adc_read() & 1);
-        busy_wait_us_32(1);
-    }
-    return seed;
-}
-
 int main() {
     stdio_init_all();
 
@@ -75,7 +61,8 @@ int main() {
     gpio_put(PICO_ONBOARD_LED, 1);
 
     // 初始化随机数生成器（用于随机颜色模式）
-    srand(get_random_seed());
+    // pico_rand 使用 RP2040 环形振荡器作为硬件熵源
+    srand(get_rand_32());
 
     // 初始化 flash 存储并加载上次保存的配色方案
     flash_storage_init();

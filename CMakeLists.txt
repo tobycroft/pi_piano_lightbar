@@ -62,11 +62,11 @@ pico_enable_stdio_usb(pi_piano_lightbar 0)
 # Add the standard library to the build
 target_link_libraries(pi_piano_lightbar
         pico_stdlib
+        pico_rand
         hardware_pio
         hardware_clocks
         hardware_flash
         hardware_sync
-        hardware_adc
         tinyusb_host
 )
 
