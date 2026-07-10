@@ -70,10 +70,16 @@ LedController::RGB LedController::colorToRgb(LedColor color) {
         case LedColor::GREEN:       return {0, 255, 0};
         case LedColor::BLUE:        return {0, 0, 255};
         case LedColor::WHITE:       return {255, 255, 255};   // R+G+B 三色混合
+        case LedColor::YELLOW:      return {255, 200, 0};     // 黄色: 红+绿, 绿略低偏暖
+        case LedColor::CYAN:        return {0, 255, 255};     // 青色: 绿+蓝 等量
+        case LedColor::ORANGE:      return {255, 80, 0};      // 橙色: 红+少量绿
+        case LedColor::MAGENTA:     return {255, 0, 255};     // 品红: 红+蓝 等量
         case LedColor::LAKE_BLUE:   return {0, 180, 255};     // 湖蓝色: 青+蓝
         case LedColor::GRASS_GREEN: return {60, 255, 30};     // 青草绿: 绿为主+少量红
         case LedColor::PINK:        return {255, 80, 180};    // 粉色: 红+蓝
         case LedColor::PURPLE:      return {100, 0, 255};     // 紫色: 蓝为主+少量红
+        case LedColor::WARM_WHITE:  return {255, 200, 120};   // 暖白: 偏黄的白
+        case LedColor::GOLD:        return {255, 180, 0};     // 金色: 偏橙的黄
         case LedColor::OFF:
         default:                    return {0, 0, 0};
     }

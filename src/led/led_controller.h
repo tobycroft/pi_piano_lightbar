@@ -29,10 +29,16 @@ enum class LedColor {
     GREEN,        // 绿色    G=255
     BLUE,         // 蓝色    B=255
     WHITE,        // 白色    R+G+B 全亮
+    YELLOW,       // 黄色    R+G
+    CYAN,         // 青色    G+B
+    ORANGE,       // 橙色    R+少量G
+    MAGENTA,      // 品红    R+B 等量
     LAKE_BLUE,    // 湖蓝色  青+蓝混合
     GRASS_GREEN,  // 青草绿色 绿为主+少量红
     PINK,         // 粉色    红+蓝混合
     PURPLE,       // 紫色    红+蓝混合，蓝偏多
+    WARM_WHITE,   // 暖白    偏黄的白
+    GOLD,         // 金色    偏橙的黄
     OFF           // 灭灯
 };
 
