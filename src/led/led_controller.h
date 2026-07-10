@@ -23,6 +23,43 @@
 
 namespace led {
 
+// =============================================================================
+// 固定亮度等级定义
+// =============================================================================
+// 用于取代 MIDI velocity 控制亮度。
+// 通过双击 BOOTSEL 键在 LOW / MEDIUM / HIGH 三档间循环切换。
+// =============================================================================
+
+enum class BrightnessLevel : uint8_t {
+    LOW,
+    MEDIUM,
+    HIGH
+};
+
+// 各亮度等级对应的实际亮度值 (0~255)
+constexpr uint8_t kBrightnessLow    = 60;
+constexpr uint8_t kBrightnessMedium = 150;
+constexpr uint8_t kBrightnessHigh   = 255;
+
+// 亮度等级总数
+constexpr int kNumBrightnessLevels = 3;
+
+// 将亮度等级转换为实际亮度值
+inline uint8_t brightnessLevelToValue(BrightnessLevel level) {
+    switch (level) {
+        case BrightnessLevel::LOW:    return kBrightnessLow;
+        case BrightnessLevel::MEDIUM: return kBrightnessMedium;
+        case BrightnessLevel::HIGH:   return kBrightnessHigh;
+        default:                      return kBrightnessHigh;
+    }
+}
+
+// 循环切换到下一个亮度等级
+inline BrightnessLevel nextBrightnessLevel(BrightnessLevel level) {
+    int next = (static_cast<int>(level) + 1) % kNumBrightnessLevels;
+    return static_cast<BrightnessLevel>(next);
+}
+
 // 颜色预设枚举 — 外部调用只需传颜色名，不需传 RGB 数值
 enum class LedColor {
     RED,          // 红色    R=255

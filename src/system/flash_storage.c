@@ -30,16 +30,18 @@
 // 槽位数据结构 (位于 flash 中)
 // =============================================================================
 // 每个槽位占 256 bytes (1 flash page):
-//   [0..3]   magic    — 校验标识
-//   [4..7]   sequence — 单调递增的写入序号
-//   [8..11]  scheme   — 配色方案索引
-//   [12..255] padding — 0xFF (未使用)
+//   [0..3]   magic      — 校验标识
+//   [4..7]   sequence   — 单调递增的写入序号
+//   [8..11]  scheme     — 配色方案索引
+//   [12..15] brightness — 亮度等级 (0=LOW, 1=MEDIUM, 2=HIGH)
+//   [16..255] padding   — 0xFF (未使用)
 // =============================================================================
 
 typedef struct {
     uint32_t magic;
     uint32_t sequence;
     int32_t  scheme;
+    int32_t  brightness;
 } flash_slot_t;
 
 // 256-byte 对齐的 RAM 缓冲区，用于 flash_range_program()
@@ -81,6 +83,35 @@ bool flash_storage_init(void) {
     return true;
 }
 
+// 将当前最新槽位的数据写入 RAM 页缓冲区
+// 如果没有有效槽位，使用默认值填充
+static void prepare_slot_page(int next_slot, uint32_t next_seq,
+                               int scheme, int brightness)
+{
+    memset(ram_page, 0xFF, FLASH_PAGE_SIZE);
+    flash_slot_t* slot = (flash_slot_t*)ram_page;
+    slot->magic      = SLOT_MAGIC;
+    slot->sequence   = next_seq;
+    slot->scheme     = scheme;
+    slot->brightness = brightness;
+}
+
+// 找到最新槽位并读取 brightness 字段，若无则返回默认值
+static int load_brightness_from_slot(int default_brightness) {
+    const uint8_t* flash_sector =
+        (const uint8_t*)(XIP_BASE + STORAGE_OFFSET);
+
+    int latest = find_latest_slot(flash_sector);
+    if (latest < 0) {
+        return default_brightness;
+    }
+
+    const flash_slot_t* slot =
+        (const flash_slot_t*)(flash_sector + latest * SLOT_SIZE);
+
+    return slot->brightness;
+}
+
 bool __no_inline_not_in_flash_func(flash_storage_save_scheme)(int scheme) {
     // 指向 flash 中存储扇区的指针（通过 XIP 映射读取）
     const uint8_t* flash_sector =
@@ -92,11 +123,13 @@ bool __no_inline_not_in_flash_func(flash_storage_save_scheme)(int scheme) {
     // 计算下一个槽位和序号
     int next_slot = (latest + 1) % SLOT_COUNT;
     uint32_t next_seq = 0;
+    int brightness = 2;  // 默认 HIGH
 
     if (latest >= 0) {
         const flash_slot_t* slot =
             (const flash_slot_t*)(flash_sector + latest * SLOT_SIZE);
         next_seq = slot->sequence + 1;
+        brightness = slot->brightness;
     }
 
     // 如果回到槽位 0，需要先擦除整个扇区
@@ -106,12 +139,8 @@ bool __no_inline_not_in_flash_func(flash_storage_save_scheme)(int scheme) {
         restore_interrupts(ints);
     }
 
-    // 准备要写入的页数据
-    memset(ram_page, 0xFF, FLASH_PAGE_SIZE);
-    flash_slot_t* slot = (flash_slot_t*)ram_page;
-    slot->magic    = SLOT_MAGIC;
-    slot->sequence = next_seq;
-    slot->scheme   = scheme;
+    // 准备要写入的页数据（保留 brightness 不变）
+    prepare_slot_page(next_slot, next_seq, scheme, brightness);
 
     // 写入 flash
     uint32_t page_offs = STORAGE_OFFSET + next_slot * SLOT_SIZE;
@@ -136,4 +165,41 @@ int __no_inline_not_in_flash_func(flash_storage_load_scheme)(int default_scheme)
         (const flash_slot_t*)(flash_sector + latest * SLOT_SIZE);
 
     return slot->scheme;
+}
+
+bool __no_inline_not_in_flash_func(flash_storage_save_brightness)(int brightness) {
+    const uint8_t* flash_sector =
+        (const uint8_t*)(XIP_BASE + STORAGE_OFFSET);
+
+    int latest = find_latest_slot(flash_sector);
+
+    int next_slot = (latest + 1) % SLOT_COUNT;
+    uint32_t next_seq = 0;
+    int scheme = 0;
+
+    if (latest >= 0) {
+        const flash_slot_t* slot =
+            (const flash_slot_t*)(flash_sector + latest * SLOT_SIZE);
+        next_seq = slot->sequence + 1;
+        scheme = slot->scheme;
+    }
+
+    if (next_slot == 0) {
+        uint32_t ints = save_and_disable_interrupts();
+        flash_range_erase(STORAGE_OFFSET, FLASH_SECTOR_SIZE);
+        restore_interrupts(ints);
+    }
+
+    prepare_slot_page(next_slot, next_seq, scheme, brightness);
+
+    uint32_t page_offs = STORAGE_OFFSET + next_slot * SLOT_SIZE;
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_program(page_offs, ram_page, FLASH_PAGE_SIZE);
+    restore_interrupts(ints);
+
+    return true;
+}
+
+int __no_inline_not_in_flash_func(flash_storage_load_brightness)(int default_brightness) {
+    return load_brightness_from_slot(default_brightness);
 }

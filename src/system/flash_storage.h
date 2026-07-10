@@ -5,7 +5,7 @@
 //
 // 扇区布局:
 //   Flash 末扇区 (4096 bytes) 被划分为 16 个 256-byte 槽位
-//   每个槽位: magic(4B) + sequence(4B) + scheme(4B) + padding(244B, 0xFF)
+//   每个槽位: magic(4B) + sequence(4B) + scheme(4B) + brightness(4B) + padding(240B, 0xFF)
 //
 // 写入策略:
 //   - 找到 sequence 最大且 magic 有效的槽位
@@ -21,6 +21,8 @@
 //   flash_storage_init();                    // 初始化（可选）
 //   int scheme = flash_storage_load_scheme(0); // 读取，默认 0
 //   flash_storage_save_scheme(2);            // 保存
+//   int brightness = flash_storage_load_brightness(2); // 读取亮度等级，默认 HIGH
+//   flash_storage_save_brightness(0);        // 保存亮度等级 (LOW)
 // =============================================================================
 
 #pragma once
@@ -42,6 +44,14 @@ bool flash_storage_save_scheme(int scheme);
 // 从 flash 读取配色方案索引
 // 如果 flash 中没有有效数据，返回 default_scheme
 int flash_storage_load_scheme(int default_scheme);
+
+// 保存亮度等级到 flash
+// 返回 true 表示成功
+bool flash_storage_save_brightness(int brightness);
+
+// 从 flash 读取亮度等级
+// 如果 flash 中没有有效数据，返回 default_brightness
+int flash_storage_load_brightness(int default_brightness);
 
 #ifdef __cplusplus
 }

@@ -49,6 +49,9 @@ static constexpr uint32_t PREVIEW_DURATION_MS = 1000;
 // BOOTSEL 长按进入 bootloader 的时长 (ms)
 static constexpr uint32_t BOOTSEL_LONG_PRESS_MS = 3000;
 
+// BOOTSEL 双击检测的超时时间 (ms)
+static constexpr uint32_t BOOTSEL_DOUBLE_CLICK_TIMEOUT_MS = 400;
+
 // BOOTSEL 检测间隔 (ms)
 static constexpr uint32_t BOOTSEL_CHECK_INTERVAL_MS = 100;
 
@@ -64,9 +67,19 @@ int main() {
     // pico_rand 使用 RP2040 环形振荡器作为硬件熵源
     srand(get_rand_32());
 
-    // 初始化 flash 存储并加载上次保存的配色方案
+    // 初始化 flash 存储并加载上次保存的配色方案和亮度等级
     flash_storage_init();
     int saved_scheme = flash_storage_load_scheme(0);
+    int saved_brightness = flash_storage_load_brightness(
+        static_cast<int>(led::BrightnessLevel::HIGH));
+
+    // 将加载的亮度等级转换为 BrightnessLevel 枚举，确保值有效
+    led::BrightnessLevel current_brightness = led::BrightnessLevel::HIGH;
+    if (saved_brightness >= 0 &&
+        saved_brightness < led::kNumBrightnessLevels) {
+        current_brightness = static_cast<led::BrightnessLevel>(saved_brightness);
+    }
+
     printf("=== Piano LED MIDI Controller ===\n");
     printf("LED strip: GPIO%d, %d LEDs\n", LED_PIN, piano::NUM_LEDS);
 
@@ -75,9 +88,9 @@ int main() {
     led::LedController led_ctrl(ws2812);
     led::LedAnimator animator(led_ctrl);
 
-    // 清空灯条，启动跑马灯
+    // 清空灯条，设置初始亮度，启动跑马灯
     led_ctrl.setAllKeys(led::LedColor::OFF);
-    led_ctrl.setBrightness(255);
+    led_ctrl.setBrightness(led::brightnessLevelToValue(current_brightness));
     led_ctrl.update();
 
     // 初始化 USB MIDI Host
@@ -109,10 +122,15 @@ int main() {
     bool preview_active = false;     // 是否正在预览配色
     uint32_t preview_start = 0;      // 预览开始时间
 
-    // BOOTSEL 按键状态
+    // 亮度等级状态
+    led::BrightnessLevel current_brightness_level = current_brightness;
+
+    // BOOTSEL 按键状态 — 双击检测
     bool bootsel_was_pressed = false;
     uint32_t bootsel_press_start = 0;
+    uint32_t bootsel_release_time = 0;
     uint32_t last_bootsel_check = 0;
+    bool waiting_for_double_click = false;  // 等待第二次点击
 
     while (true) {
         // 处理 USB Host 事件
@@ -122,44 +140,90 @@ int main() {
 
         midi_connected = midi_host.is_connected();
 
-        // --- BOOTSEL 按键检测 ---
+        // --- BOOTSEL 按键检测（支持双击、单击、长按） ---
         if (now - last_bootsel_check >= BOOTSEL_CHECK_INTERVAL_MS) {
             last_bootsel_check = now;
             bool pressed = bootsel_button_is_pressed();
 
+            // --- 按键按下事件 ---
             if (pressed && !bootsel_was_pressed) {
                 bootsel_press_start = now;
                 printf("BOOTSEL pressed\n");
             }
 
+            // --- 按键释放事件 ---
             if (!pressed && bootsel_was_pressed) {
-                // 短按: 切换配色方案
-                if (now - bootsel_press_start < BOOTSEL_LONG_PRESS_MS) {
-                    current_scheme = (current_scheme + 1) % piano::kNumColorSchemes;
-                    printf("Scheme switched to: %d\n", current_scheme);
-                    flash_storage_save_scheme(current_scheme);
+                uint32_t press_duration = now - bootsel_press_start;
 
-                    // 仅在非 MIDI 模式下预览配色
-                    if (!midi_connected) {
-                        // 点亮全部按键展示当前配色
-                        for (int i = 0; i < static_cast<int>(piano::NUM_LEDS); i++) {
-                            led::LedColor color = piano::key_color(i, current_scheme);
-                            led_ctrl.setKey(static_cast<uint>(i), color);
+                if (press_duration >= BOOTSEL_LONG_PRESS_MS) {
+                    // 长按（≥3秒）→ 进入 bootloader
+                    printf("BOOTSEL held 3s, entering bootloader...\n");
+                    led_ctrl.clear();
+                    sleep_ms(100);
+                    rom_reset_usb_boot(0, 0);
+                } else {
+                    // 短按释放
+                    if (waiting_for_double_click) {
+                        // 第二次点击 → 双击！切换亮度等级
+                        waiting_for_double_click = false;
+                        current_brightness_level = led::nextBrightnessLevel(current_brightness_level);
+                        uint8_t brightness_val = led::brightnessLevelToValue(current_brightness_level);
+                        led_ctrl.setBrightness(brightness_val);
+                        flash_storage_save_brightness(
+                            static_cast<int>(current_brightness_level));
+
+                        printf("Brightness doubled-clicked -> level %d (value %d)\n",
+                               static_cast<int>(current_brightness_level), brightness_val);
+
+                        // MIDI 已连接时，更新所有活跃按键的亮度
+                        if (midi_connected) {
+                            for (int i = 0; i < static_cast<int>(piano::NUM_LEDS); i++) {
+                                if (active_notes[i]) {
+                                    led::LedColor color = piano::key_color(i, current_scheme);
+                                    led_ctrl.setKey(static_cast<uint>(i), color);
+                                } else {
+                                    led_ctrl.setKey(static_cast<uint>(i), led::LedColor::OFF);
+                                }
+                            }
+                            led_ctrl.update();
                         }
-                        led_ctrl.update();
-                        preview_active = true;
-                        preview_start = now;
+                    } else {
+                        // 第一次点击 → 等待第二次点击（双击超时）
+                        waiting_for_double_click = true;
+                        bootsel_release_time = now;
                     }
                 }
             }
 
+            // --- 长按检测（按住不放） ---
             if (pressed && bootsel_was_pressed) {
-                // 长按 3 秒 → 进入 bootloader
                 if (now - bootsel_press_start >= BOOTSEL_LONG_PRESS_MS) {
                     printf("BOOTSEL held 3s, entering bootloader...\n");
                     led_ctrl.clear();
                     sleep_ms(100);
                     rom_reset_usb_boot(0, 0);
+                }
+            }
+
+            // --- 双击超时检测：第一次点击后未在超时内按下第二次 → 视为单击，切换配色 ---
+            if (waiting_for_double_click &&
+                now - bootsel_release_time >= BOOTSEL_DOUBLE_CLICK_TIMEOUT_MS) {
+                waiting_for_double_click = false;
+
+                // 单击：切换配色方案
+                current_scheme = (current_scheme + 1) % piano::kNumColorSchemes;
+                printf("Scheme switched to: %d\n", current_scheme);
+                flash_storage_save_scheme(current_scheme);
+
+                // 仅在非 MIDI 模式下预览配色
+                if (!midi_connected) {
+                    for (int i = 0; i < static_cast<int>(piano::NUM_LEDS); i++) {
+                        led::LedColor color = piano::key_color(i, current_scheme);
+                        led_ctrl.setKey(static_cast<uint>(i), color);
+                    }
+                    led_ctrl.update();
+                    preview_active = true;
+                    preview_start = now;
                 }
             }
 
@@ -196,14 +260,14 @@ int main() {
         }
 
         if (!midi_connected && was_connected) {
-            // MIDI 设备断开 → 恢复板载 LED 常亮, 恢复最高亮度
+            // MIDI 设备断开 → 恢复板载 LED 常亮
             printf("MIDI device disconnected, returning to chase mode...\n");
             gpio_put(PICO_ONBOARD_LED, 1);
             onboard_led_on = true;
             midi_host.reset();
 
-            // 恢复最高亮度，清空灯条，启动跑马灯
-            led_ctrl.setBrightness(255);
+            // 恢复当前亮度等级，清空灯条，启动跑马灯
+            led_ctrl.setBrightness(led::brightnessLevelToValue(current_brightness_level));
             animator.reset();
         }
 
@@ -227,12 +291,9 @@ int main() {
 
                     if (e.type == midi::EventType::NoteOn) {
                         active_notes[idx] = true;
-                        // 将 MIDI velocity (0~127) 映射为亮度 (0~255)
-                        uint8_t brightness = static_cast<uint8_t>(
-                            (static_cast<uint16_t>(e.velocity) * 255) / 127);
-                        // 根据当前配色方案选择白键/黑键颜色
+                        // 使用固定亮度（忽略 MIDI velocity），由当前亮度等级决定
                         led::LedColor color = piano::key_color(idx, current_scheme);
-                        led_ctrl.setKey(static_cast<uint>(idx), color, brightness);
+                        led_ctrl.setKey(static_cast<uint>(idx), color);
                         updated = true;
                     } else {
                         active_notes[idx] = false;
