@@ -53,7 +53,8 @@ static constexpr uint32_t BOOTSEL_LONG_PRESS_MS = 3000;
 static constexpr uint32_t BOOTSEL_DOUBLE_CLICK_TIMEOUT_MS = 400;
 
 // BOOTSEL 检测间隔 (ms)
-static constexpr uint32_t BOOTSEL_CHECK_INTERVAL_MS = 100;
+// 10ms 的轮询间隔可以可靠捕获快速双击，同时避免过度占用 CPU
+static constexpr uint32_t BOOTSEL_CHECK_INTERVAL_MS = 10;
 
 int main() {
     stdio_init_all();
@@ -206,7 +207,8 @@ int main() {
             }
 
             // --- 双击超时检测：第一次点击后未在超时内按下第二次 → 视为单击，切换配色 ---
-            if (waiting_for_double_click &&
+            // 注意：仅在按钮当前未按下时触发超时，避免在第二次按下过程中超时刚好到期
+            if (waiting_for_double_click && !pressed &&
                 now - bootsel_release_time >= BOOTSEL_DOUBLE_CLICK_TIMEOUT_MS) {
                 waiting_for_double_click = false;
 
