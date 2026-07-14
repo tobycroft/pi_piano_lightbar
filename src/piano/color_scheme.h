@@ -67,15 +67,11 @@ struct ColorScheme {
 };
 
 static constexpr ColorScheme kColorSchemes[] = {
-    // 方案 0: 白键=白, 黑键=青草绿
-    { led::LedColor::WHITE, led::LedColor::GRASS_GREEN, false },
-    // 方案 1: 白键=白, 黑键=湖蓝
-    { led::LedColor::WHITE, led::LedColor::LAKE_BLUE, false },
-    // 方案 2: 白键=青, 黑键=品红
-    { led::LedColor::CYAN, led::LedColor::MAGENTA, false },
-    // 方案 3: 白键=湖蓝, 黑键=青草绿
+    // 方案 0: 白键=湖蓝, 黑键=青草绿
     { led::LedColor::LAKE_BLUE, led::LedColor::GRASS_GREEN, false },
-    // 方案 4: 随机颜色 — 每次按键使用随机颜色
+    // 方案 1: 白键=绿色, 黑键=红色
+    { led::LedColor::GREEN, led::LedColor::RED, false },
+    // 方案 2: 随机颜色 — 白键和黑键都随机
     { led::LedColor::OFF, led::LedColor::OFF, true },
 };
 
