@@ -1,5 +1,7 @@
 # pi_piano_lightbar 🎹✨
 
+> 🇬🇧 English version: [README_en.md](./README_en.md)
+>
 > **全球首个基于 RP2040 的 88 键钢琴 LED 指导系统 —— USB MIDI Host → WS2812 灯条实时可视化**
 
 一个运行在 **Raspberry Pi Pico (RP2040)** 上的硬件项目，能把一台 USB MIDI 键盘（或者任何发出 MIDI 信号的设备）的弹奏动作，实时反映到一整条 88 键 WS2812 灯条上。**这是整个家族里** **唯一** **做"指导系统"的项目**，也是**唯一**支持**黑键和白键使用不同颜色配色方案**的项目。
